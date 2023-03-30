@@ -12,6 +12,7 @@
 #define SCALE 8
 
 // clang-format off
+
 int mask[MASK_N][MASK_X][MASK_Y] = {
   
     {{ -1, -4, -6, -4, -1},
