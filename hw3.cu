@@ -112,17 +112,18 @@ void sobel(unsigned char* s, unsigned char* t, unsigned height, unsigned width, 
     int x, y, i, v, u;
     int R, G, B;
     double val[MASK_N * 3] = {0.0};
+    
     int adjustX, adjustY, xBound, yBound;
+    adjustX = (MASK_X % 2) ? 1 : 0;
+    adjustY = (MASK_Y % 2) ? 1 : 0;
+    xBound = MASK_X / 2;
+    yBound = MASK_Y / 2;
 
     for (y = 0; y < height; ++y) {
 
         for (x = 0; x < width; ++x) {
 
             for (i = 0; i < MASK_N; ++i) {
-                adjustX = (MASK_X % 2) ? 1 : 0;
-                adjustY = (MASK_Y % 2) ? 1 : 0;
-                xBound = MASK_X / 2;
-                yBound = MASK_Y / 2;
 
                 val[i * 3 + 2] = 0.0;
                 val[i * 3 + 1] = 0.0;
@@ -163,7 +164,26 @@ void sobel(unsigned char* s, unsigned char* t, unsigned height, unsigned width, 
         }
         
     }
+    
 }
+
+// __global__ void sobel()
+// {
+//     int i = blockIdx.x * blockDim.x + threadIdx.x;
+//     int j = blockIdx.y * blockDim.y + threadIdx.y;
+//     C[j][i] = A[j][i] * doubleValue(B[j][i]);
+// }
+
+
+
+// 1.png: 4928 x 3264
+// 2.png: 16320 x 10809
+// 3.png: 634 x 634
+// 4.png: 900 x 622
+// 5.png: 1800 x 1244
+// 6.png: 3600 x 2488
+// 7.png: 7200 x 4976
+// 8.png: 14400 x 9952
 
 
 
@@ -175,6 +195,8 @@ int main(int argc, char** argv) {
 
     read_png(argv[1], &src_img, &height, &width, &channels);
     assert(channels == 3);
+
+    printf("width x height: %d x %d\n", width, height);
 
     unsigned char* dst_img =
         (unsigned char*)malloc(height * width * channels * sizeof(unsigned char));

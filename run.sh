@@ -5,7 +5,7 @@ cd ~/root/hw3/
 make clean; make 2> make-stderr.out
 RunFile=./hw3
 
-testCase=2
+testCase=8
 
 inFile=./samples/$testCase.png
 outFile=out.png

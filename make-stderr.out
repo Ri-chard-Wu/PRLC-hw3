@@ -1,9 +1,9 @@
-hw3.cu(41): warning: result of call is not used
+hw3.cu(42): warning: result of call is not used
 
 ptxas info    : 0 bytes gmem
-hw3.cu(41): warning: result of call is not used
+hw3.cu(42): warning: result of call is not used
 
 hw3.cu: In function 'int read_png(const char*, unsigned char**, unsigned int*, unsigned int*, unsigned int*)':
-hw3.cu:41:6: warning: ignoring return value of 'size_t fread(void*, size_t, size_t, FILE*)', declared with attribute warn_unused_result [-Wunused-result]
+hw3.cu:42:6: warning: ignoring return value of 'size_t fread(void*, size_t, size_t, FILE*)', declared with attribute warn_unused_result [-Wunused-result]
      fread(sig, 1, 8, infile);
      ~^~~~~~~~~~~~~~~~~~~
