@@ -219,14 +219,13 @@ void sobel(unsigned char* s, unsigned char* t, unsigned height, unsigned width, 
 
 __global__ void sobel(unsigned char *s, unsigned char *t, unsigned height, unsigned width, unsigned channels)
 {
-    int tidx = blockIdx.x * blockDim.x + threadIdx.x;
-    int tidy = blockIdx.y * blockDim.y + threadIdx.y;
-    int tidz = blockIdx.z * blockDim.z + threadIdx.z;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
 
+    __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
 
-    __shared__ float smSrc[THREADS_PER_BLOCK + 2];
-
-    C[j][i] = A[j][i] * doubleValue(B[j][i]);
+    smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x] = s[3 * ((width + 4) * y + x) + z];
 }
 
 
