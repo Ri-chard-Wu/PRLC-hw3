@@ -157,7 +157,7 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     int z = blockIdx.z * blockDim.z + threadIdx.z;
 
 
-    printf("threadIdx.x: %d, blockIdx.x: %d, blockDim.x: %d", threadIdx.x, blockIdx.x, blockDim.x);
+    // printf("threadIdx.x: %d, blockIdx.x: %d, blockDim.x: %d\n", threadIdx.x, blockIdx.x, blockDim.x);
 
     if(x >= width || y >= height) return;
 
@@ -165,20 +165,20 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
     __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
 
-    smSrc[BLOCK_N_X * threadIdx.y + threadIdx.x] = s[3 * ((width + 4) * y + x) + z];
+    smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x] = s[3 * ((width + 4) * y + x) + z];
     
     if(threadIdx.x < 4){
-        smSrc[BLOCK_N_X * threadIdx.y + threadIdx.x + BLOCK_N_X] =\
+        smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x + BLOCK_N_X] =\
                     s[3 * ((width + 4) * (basey + threadIdx.y) + nextBasex + threadIdx.x) + z];
     }
     
     if(threadIdx.y < 4){
-        smSrc[BLOCK_N_X * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
+        smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
                     s[3 * ((width + 4) * (nextBasey + threadIdx.y) + basex + threadIdx.x) + z];
     }
 
     if(threadIdx.x < 4 && threadIdx.y < 4){
-        smSrc[BLOCK_N_X * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] = \
+        smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] = \
                     s[3 * ((width + 4) * (nextBasey + threadIdx.y) + nextBasex + threadIdx.x) + z];
     }
 
@@ -193,17 +193,15 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     for (int i = 0; i < MASK_N; ++i){
         for (int v = 0; v < 5; ++v){
             for (int u = 0; u < 5; ++u){
-                val[i] += smSrc[BLOCK_N_X * (threadIdx.y + v) + threadIdx.x + u] * mask[i][u][v];
+                val[i] += smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + threadIdx.x + u] * mask[i][u][v];
             }
         }
     }
 
-    
-
     val[0] = sqrt(val[0] * val[0] + val[1] * val[1]) / SCALE;
     t[3 * (width * y + x) + z] = (val[0] > 255.0) ? 255 : val[0];
-    
 }
+
 
 
 
