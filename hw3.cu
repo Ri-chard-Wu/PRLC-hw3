@@ -258,6 +258,9 @@ int main(int argc, char** argv) {
 
 
     write_png(argv[2], dst_img, height, width, channels);
+
+    cudaFree(devSrc);
+    cudaFree(devDst);
     free(src_img);
     free(dst_img);
 
