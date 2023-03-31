@@ -1,9 +1,5 @@
-hw3.cu(45): warning: result of call is not used
-
-ptxas info    : 0 bytes gmem
-hw3.cu(45): warning: result of call is not used
-
-hw3.cu: In function 'int read_png(const char*, unsigned char**, unsigned int*, unsigned int*, unsigned int*)':
-hw3.cu:45:6: warning: ignoring return value of 'size_t fread(void*, size_t, size_t, FILE*)', declared with attribute warn_unused_result [-Wunused-result]
-     fread(sig, 1, 8, infile);
-     ~^~~~~~~~~~~~~~~~~~~
+ptxas info    : 23 bytes gmem
+ptxas info    : Compiling entry function '_Z10cuda_hellov' for 'sm_61'
+ptxas info    : Function properties for _Z10cuda_hellov
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 8 registers, 320 bytes cmem[0]
