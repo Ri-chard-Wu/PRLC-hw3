@@ -216,6 +216,10 @@ __global__ void sobel(unsigned char *s, unsigned char *t, unsigned height, unsig
 {
     int basex = blockIdx.x * blockDim.x;
     int basey = blockIdx.y * blockDim.y;
+    
+    int nextBasex = (blockIdx.x + 1) * blockDim.x;
+    int nextBasey = (blockIdx.y + 1) * blockDim.y;
+
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
@@ -225,21 +229,23 @@ __global__ void sobel(unsigned char *s, unsigned char *t, unsigned height, unsig
     smSrc[BLOCK_N_X * threadIdx.y + threadIdx.x] = s[3 * ((width + 4) * y + x) + z];
     
     if(threadIdx.x < 4){
-        smSrc[BLOCK_N_X * threadIdx.y + threadIdx.x + BLOCK_N_X] = s[3 * ((width + 4) * y + x + BLOCK_N_X) + z];
+        smSrc[BLOCK_N_X * threadIdx.y + threadIdx.x + BLOCK_N_X] =\
+                     s[3 * ((width + 4) * (basey + threadIdx.y) + nextBasex + threadIdx.x) + z];
     }
-    else if(threadIdx.x < 8){
-        smSrc[BLOCK_N_X * (threadIdx.x - 4 + BLOCK_N_X) + threadIdx.y] = \
-                        s[3 * ((width + 4) * (basey + blockDim.y + threadIdx.x - 4) + basex + threadIdx.y) + z];
-    }
-    
 
-    if(threadIdx.x < 2){
-
+    if(threadIdx.y < 4){
+        smSrc[BLOCK_N_X * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
+                     s[3 * ((width + 4) * (nextBasey + threadIdx.y) + basex + threadIdx.x) + z];
     }
+
+    if(threadIdx.x < 4 && threadIdx.y < 4){
+        smSrc[BLOCK_N_X * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] = \
+                        s[3 * ((width + 4) * (nextBasey + threadIdx.y) + nextBasex + threadIdx.x) + z];
+    }
+
+    __syncthreads();
+
 }
-
-
-
 
 
 
