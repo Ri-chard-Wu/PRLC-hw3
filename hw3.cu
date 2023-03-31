@@ -55,29 +55,6 @@
 
 
 
-
-
-// clang-format off
-
-int mask[MASK_N][MASK_X][MASK_Y] = {
-  
-    {{ -1, -4, -6, -4, -1},
-     { -2, -8,-12, -8, -2},
-     {  0,  0,  0,  0,  0},
-     {  2,  8, 12,  8,  2},
-     {  1,  4,  6,  4,  1}},
-
-    {{ -1, -2,  0,  2,  1},
-     { -4, -8,  0,  8,  4},
-     { -6,-12,  0, 12,  6},
-     { -4, -8,  0,  8,  4},
-     { -1, -2,  0,  2,  1}}
-
-};
-
-
-
-
 int read_png(const char* filename, unsigned char** image, unsigned* height, unsigned* width,
     unsigned* channels) {
     unsigned char sig[8];
@@ -155,6 +132,23 @@ void write_png(const char* filename, png_bytep image, const unsigned height, con
 __global__ void sobel(unsigned char *s, unsigned char *t, 
                                 unsigned height, unsigned width, unsigned channels)
 {
+
+    int mask[MASK_N][MASK_X][MASK_Y] = {
+    
+        {{ -1, -4, -6, -4, -1},
+        { -2, -8,-12, -8, -2},
+        {  0,  0,  0,  0,  0},
+        {  2,  8, 12,  8,  2},
+        {  1,  4,  6,  4,  1}},
+
+        {{ -1, -2,  0,  2,  1},
+        { -4, -8,  0,  8,  4},
+        { -6,-12,  0, 12,  6},
+        { -4, -8,  0,  8,  4},
+        { -1, -2,  0,  2,  1}}
+
+    };
+
     int basex = blockIdx.x * blockDim.x;
     int basey = blockIdx.y * blockDim.y;
     
@@ -164,6 +158,9 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+
+
 
     if(x >= width || y >= height) return;
 
@@ -176,32 +173,45 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
                     s[3 * ((width + 4) * (basey + threadIdx.y) + nextBasex + threadIdx.x) + z];
     }
 
+
+    
     if(threadIdx.y < 4){
         smSrc[BLOCK_N_X * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
                     s[3 * ((width + 4) * (nextBasey + threadIdx.y) + basex + threadIdx.x) + z];
     }
+
+  
 
     if(threadIdx.x < 4 && threadIdx.y < 4){
         smSrc[BLOCK_N_X * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] = \
                     s[3 * ((width + 4) * (nextBasey + threadIdx.y) + nextBasex + threadIdx.x) + z];
     }
 
+    
+
     __syncthreads();
+
+    
 
     double val[MASK_N] = {0.0};
     
-    for (i = 0; i < MASK_N; ++i){
-        for (v = 0; v < 5; ++v){
-            for (u = 0; u < 5; ++u){
+    for (int i = 0; i < MASK_N; ++i){
+        for (int v = 0; v < 5; ++v){
+            for (int u = 0; u < 5; ++u){
                 val[i] += smSrc[BLOCK_N_X * (threadIdx.y + v) + threadIdx.x + u] * mask[i][u][v];
             }
         }
     }
 
+    
+
     val[0] = sqrt(val[0] * val[0] + val[1] * val[1]) / SCALE;
     t[3 * (width * y + x) + z] = (val[0] > 255.0) ? 255 : val[0];
+
+    
     
 }
+
 
 
 
@@ -211,13 +221,11 @@ int main(int argc, char** argv) {
     
     unsigned height, width, channels, gridNx, gridNy;
     unsigned char *src_img = NULL;
-    unsigned char* dst_img =
-        (unsigned char*) malloc(height * width * channels * sizeof(unsigned char));
-
     read_png(argv[1], &src_img, &height, &width, &channels);
     assert(channels == 3);
     printf("width x height: %d x %d\n", width, height);
-    cc_check_param(width, height);
+    // cc_check_param(width, height);
+
 
     gridNx = width / BLOCK_N_X + 1;
     gridNy = height / BLOCK_N_Y + 1;
@@ -226,11 +234,16 @@ int main(int argc, char** argv) {
 
     unsigned char *devSrc, *devDst;
     cudaMalloc(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
-    cudaMalloc(&devDst, height * width * channels * sizeof(unsigned char));
     cudaMemcpy(devSrc, src_img, height * width * channels * sizeof(unsigned char), cudaMemcpyHostToDevice);
     
-    sobel<<<nBlocks, nThreadsPerBlock>>>(devSrc, devDst, height, width, channels); 
+    cudaMalloc(&devDst, height * width * channels * sizeof(unsigned char));
 
+    sobel<<<nBlocks, nThreadsPerBlock>>>(devSrc, devDst, height, width, channels); 
+    cudaDeviceSynchronize();
+    
+
+    unsigned char* dst_img =
+        (unsigned char*) malloc(height * width * channels * sizeof(unsigned char));
     cudaMemcpy(dst_img, devDst, height * width * channels * sizeof(unsigned char), cudaMemcpyDeviceToHost);
 
     write_png(argv[2], dst_img, height, width, channels);
@@ -243,3 +256,52 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+
+
+
+
+
+
+
+// #include <stdio.h>
+
+// __global__
+// void saxpy(int n, unsigned char a, unsigned char *x, unsigned char *y)
+// {
+//     int i = blockIdx.x*blockDim.x + threadIdx.x;
+//     if (i < n) y[i] = a*x[i] + y[i];
+// }
+
+// int main(void)
+// {
+//     int N = 1<<20;
+//     unsigned char *x, *y, *d_x, *d_y;
+//     x = (unsigned char*)malloc(N*sizeof(unsigned char));
+//     y = (unsigned char*)malloc(N*sizeof(unsigned char));
+
+//     cudaMalloc(&d_x, N*sizeof(unsigned char)); 
+//     cudaMalloc(&d_y, N*sizeof(unsigned char));
+
+//     for (int i = 0; i < N; i++) {
+//         x[i] = 1.0f;
+//         y[i] = 2.0f;
+//     }
+
+//     cudaMemcpy(d_x, x, N*sizeof(unsigned char), cudaMemcpyHostToDevice);
+//     cudaMemcpy(d_y, y, N*sizeof(unsigned char), cudaMemcpyHostToDevice);
+
+//     // Perform SAXPY on 1M elements
+//     saxpy<<<(N+255)/256, 256>>>(N, 2, d_x, d_y);
+
+//     cudaMemcpy(y, d_y, N*sizeof(unsigned char), cudaMemcpyDeviceToHost);
+
+//     // unsigned char maxError = 0.0f;
+//     // for (int i = 0; i < N; i++)
+//     //     maxError = max(maxError, abs(y[i]-4.0f));
+//     // printf("Max error: %f\n", maxError);
+
+//     cudaFree(d_x);
+//     cudaFree(d_y);
+//     free(x);
+//     free(y);
+// }
