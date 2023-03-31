@@ -128,9 +128,6 @@ int read_png(const char* filename, unsigned char** image, unsigned* height, unsi
 }
 
 
-
-
-
 void write_png(const char* filename, png_bytep image, const unsigned height, const unsigned width,
     const unsigned channels) {
     FILE* fp = fopen(filename, "wb");
@@ -206,26 +203,39 @@ void sobel(unsigned char* s, unsigned char* t, unsigned height, unsigned width, 
             const unsigned char cR = (totalR > 255.0) ? 255 : totalR;
             const unsigned char cG = (totalG > 255.0) ? 255 : totalG;
             const unsigned char cB = (totalB > 255.0) ? 255 : totalB;
-            t[channels * (width * y + x) + 2] = cR;
-            t[channels * (width * y + x) + 1] = cG;
-            t[channels * (width * y + x) + 0] = cB;
-        }
-        
+            t[channels * (width * y + x) + 2] = cR;    
+            t[channels * (width * y + x) + 1] = cG;    
+            t[channels * (width * y + x) + 0] = cB;      
+        }   
     }
-    
 }
 
 
 
 __global__ void sobel(unsigned char *s, unsigned char *t, unsigned height, unsigned width, unsigned channels)
 {
+    int basex = blockIdx.x * blockDim.x;
+    int basey = blockIdx.y * blockDim.y;
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
 
     __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
 
-    smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x] = s[3 * ((width + 4) * y + x) + z];
+    smSrc[BLOCK_N_X * threadIdx.y + threadIdx.x] = s[3 * ((width + 4) * y + x) + z];
+    
+    if(threadIdx.x < 4){
+        smSrc[BLOCK_N_X * threadIdx.y + threadIdx.x + BLOCK_N_X] = s[3 * ((width + 4) * y + x + BLOCK_N_X) + z];
+    }
+    else if(threadIdx.x < 8){
+        smSrc[BLOCK_N_X * (threadIdx.x - 4 + BLOCK_N_X) + threadIdx.y] = \
+                        s[3 * ((width + 4) * (basey + blockDim.y + threadIdx.x - 4) + basex + threadIdx.y) + z];
+    }
+    
+
+    if(threadIdx.x < 2){
+
+    }
 }
 
 
