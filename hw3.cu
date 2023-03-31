@@ -11,6 +11,52 @@
 #define MASK_Y 5
 #define SCALE 8
 
+
+
+
+#define CC_GRID_MAX_X_DIM (1 << 31) - 1
+#define CC_GRID_MAX_Y_DIM 65535
+#define CC_GRID_MAX_Z_DIM 65535
+
+#define CC_BLOCK_MAX_X_DIM 1024
+#define CC_BLOCK_MAX_Y_DIM 1024
+#define CC_BLOCK_MAX_Z_DIM 64
+
+#define CC_BLOCK_MAX_N_THREADS 1024
+
+#define CC_MAX_N_RSD_BLOCKS 32
+#define CC_MAX_N_RSD_WARPS 64
+#define CC_MAX_N_RSD_THREADS 2048
+
+
+// 1.png: 4928 x 3264 x 3
+// 2.png: 16320 x 10809 x 3
+// 3.png: 634 x 634 x 3
+// 4.png: 900 x 622 x 3
+// 5.png: 1800 x 1244 x 3
+// 6.png: 3600 x 2488 x 3
+// 7.png: 7200 x 4976 x 3
+// 8.png: 14400 x 9952 x 3
+
+
+// #define GRID_N_X
+// #define GRID_N_Y
+#define GRID_N_Z 3
+
+#define BLOCK_N_X 8
+#define BLOCK_N_Y 8
+#define BLOCK_N_Z 1
+
+// #define BLOCK_N_THREADS
+
+
+
+
+
+
+
+
+
 // clang-format off
 
 int mask[MASK_N][MASK_X][MASK_Y] = {
@@ -167,44 +213,51 @@ void sobel(unsigned char* s, unsigned char* t, unsigned height, unsigned width, 
     
 }
 
-// __global__ void sobel()
-// {
-//     int i = blockIdx.x * blockDim.x + threadIdx.x;
-//     int j = blockIdx.y * blockDim.y + threadIdx.y;
-//     C[j][i] = A[j][i] * doubleValue(B[j][i]);
-// }
+
+
+__global__ void sobel(unsigned char *s, unsigned char *t, unsigned height, unsigned width, unsigned channels)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    C[j][i] = A[j][i] * doubleValue(B[j][i]);
+}
 
 
 
-// 1.png: 4928 x 3264
-// 2.png: 16320 x 10809
-// 3.png: 634 x 634
-// 4.png: 900 x 622
-// 5.png: 1800 x 1244
-// 6.png: 3600 x 2488
-// 7.png: 7200 x 4976
-// 8.png: 14400 x 9952
 
 
 
 int main(int argc, char** argv) {
     assert(argc == 3);
-
-    unsigned height, width, channels;
-    unsigned char* src_img = NULL;
+    
+    
+    unsigned height, width, channels, gridNx, gridNy;
+    unsigned char *src_img = NULL;
+    unsigned char* dst_img =
+        (unsigned char*) malloc(height * width * channels * sizeof(unsigned char));
 
     read_png(argv[1], &src_img, &height, &width, &channels);
     assert(channels == 3);
-
     printf("width x height: %d x %d\n", width, height);
+    cc_check_param(width, height);
 
-    unsigned char* dst_img =
-        (unsigned char*)malloc(height * width * channels * sizeof(unsigned char));
+    gridNx = width / BLOCK_N_X + 1;
+    gridNy = height / BLOCK_N_Y + 1;
+    dim3 nThreadsPerBlock(BLOCK_N_X, BLOCK_N_Y, BLOCK_N_Z);
+    dim3 nBlocks(gridNx, gridNy, GRID_N_Z);
 
-    sobel(src_img, dst_img, height, width, channels);
+    unsigned char *devSrc, *devDst;
+    cudaMalloc(&devSrc, height * width * channels * sizeof(unsigned char));
+    cudaMalloc(&devDst, height * width * channels * sizeof(unsigned char));
+    cudaMemcpy(devSrc, src_img, height * width * channels * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    
+    sobel<<<nBlocks, nThreadsPerBlock>>>(devSrc, devDst, height, width, channels); 
+
+    cudaMemcpy(dst_img, devDst, height * width * channels * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+
 
     write_png(argv[2], dst_img, height, width, channels);
-
     free(src_img);
     free(dst_img);
 
