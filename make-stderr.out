@@ -8,7 +8,7 @@ ptxas info    : 0 bytes gmem
 ptxas info    : Compiling entry function '_Z5sobelPhS_jjj' for 'sm_61'
 ptxas info    : Function properties for _Z5sobelPhS_jjj
     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
-ptxas info    : Used 23 registers, 144 bytes smem, 348 bytes cmem[0], 12 bytes cmem[2]
+ptxas info    : Used 29 registers, 432 bytes smem, 348 bytes cmem[0], 12 bytes cmem[2]
 hw3.cu(66): warning: result of call is not used
 
 hw3.cu: In function 'int read_png(const char*, unsigned char**, unsigned int*, unsigned int*, unsigned int*)':
