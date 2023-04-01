@@ -140,7 +140,6 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
                                 const unsigned height, const unsigned width, const unsigned channels)
 {
 
-
     const int mask[MASK_N][MASK_X][MASK_Y] = {
     
         {{ -1, -4, -6, -4, -1},
@@ -174,107 +173,104 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const int x = basex + tidx_x;
     const int y = basey + tidx_y;
 
-
-
-    __shared__ unsigned char smSrc[128 * (BLOCK_N_Y + 4)];
-    // __shared__ ulong4 smSrc[(BLOCK_N_Y + 4)];
+    __shared__ unsigned char smSrc[256 * (BLOCK_N_Y + 4)];
+    __shared__ unsigned int xzBase[BLOCK_N_Y + 4];
 
 
     if(x > width + 4 - 1 || y > height + 4 - 1) return;
     
- 
-    // smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z] =\
-    //                     s[channels * ((width + 4) * y + x) + z];
     
-
-    // if((tidx_x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
-    //     smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + BLOCK_N_X + tidx_x) + tidx_z] =\
-    //                     s[channels * ((width + 4) * y + BLOCK_N_X + x) + z];
-    // }
-
-    // if((tidx_y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
-    //     smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z] =\
-    //                     s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
-    // }
-
-    // if((tidx_x < 4) && (tidx_y < 4) &&\
-    //                 (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
-    //     smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + BLOCK_N_X + tidx_x) + tidx_z] =\
-    //                     s[channels * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
-    // }
-    
+    int idx_lower, idx_upper, idx_raw;
 
     if(tidx_x == 0 && tidx_z == 0){
+        
+        idx_raw = (channels * ((width + 4) * y + x) + z);
+        idx_lower = idx_raw / 128;
+        idx_upper = idx_lower + 1;
+        xzBase[tidx_y] = idx_raw - idx_lower * 128;
 
-        // printf("%d, %d\n", x, y);
-        // printf("a\n");
+        reinterpret_cast<int4*>(smSrc)[2 * tidx_y + 0] = reinterpret_cast<int4*>(s)[idx_lower];
+        reinterpret_cast<int4*>(smSrc)[2 * tidx_y + 1] = reinterpret_cast<int4*>(s)[idx_upper];
 
-        if(x + 128 - 1 <= width + 4 - 1){
-            // ((float4 *)(&smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z]))[0] =\
-            //                     ((float4 *)(&s[channels * ((width + 4) * y + x) + z]))[0];
+        if(BLOCK_N_Y + y <= height + 4 - 1){
 
+            idx_raw = (channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z);
+            idx_lower = idx_raw / 128;
+            idx_upper = idx_lower + 1;
+            xzBase[BLOCK_N_Y + tidx_y] = idx_raw - idx_lower * 128;
+                        
+            reinterpret_cast<int4*>(smSrc)[2 * (BLOCK_N_Y + tidx_y) + 0] =\
+                     reinterpret_cast<int4*>(s)[idx_lower];
 
-            reinterpret_cast<int4*>(smSrc)[0] =\
-                 reinterpret_cast<int4*>(s)[0];
-
-
-            // smSrc[tidx_y] = s[(3 * ((width + 4) * y +  bidx_x * bdim_x)) / 128];
-            // ((ulong4 *)(&smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z]))[0] =\
-            //                      s[(channels * ((width + 4) * y + x) + z) / 128];
-
-
-            // printf("b\n");
-
-            // ((float4 *)(&smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z]))[0] = a;
+            reinterpret_cast<int4*>(smSrc)[2 * (BLOCK_N_Y + tidx_y) + 1] =\
+                     reinterpret_cast<int4*>(s)[idx_upper];
         }
-
-        // printf("c\n");
-
-
-
-        // if(BLOCK_N_Y + y <= height + 4 - 1){
-        //     ((float4 *)(&smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z]))[0] =\
-        //             ((float4 *)(&s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z]))[0];
-
-        //     smSrc[BLOCK_N_Y + tidx_y] = \
-        //         ((ulong4 *)(&s[(3 * ((width + 4) * (BLOCK_N_Y + y) +  bidx_x * bdim_x)) / 128]))[0];                    
-        // }
+        
     }
 
 
-
-
-    for(int i=0;i<128;i++){
-        for(int j=0;j<8;j++){
-            printf("%d\n", ((unsigned char *)smSrc)[channels * ((BLOCK_N_X + 4) * j + i)]);
+    if(y == 26 && x == 150 && z == 1){
+        for(int j=0; j < BLOCK_N_Y + 4;j++){
+            for(int i=0; i < (32 + 4) * 3; i++){
+        
+                if(smSrc[256 * j + xzBase[j] + i] != s[3 * (width + 4) * (basey + j) + i]){
+                    // printf("==\n");
+                    printf("%d, %d\n", smSrc[256 * j + xzBase[j] + i], s[3 * (width + 4) * (basey + j) + i]);
+                }
+            }
         }
     }
+
+
+
+    // if(tidx_x == 2 && tidx_z == 0){
+    //     for(int i=0; i < 32 * 3; i++){
+    //         for(int j=0;j<BLOCK_N_Y + 4;j++){
+
+    //             idx_raw = 256 * j + xzBase[j] + i;
+
+    //             // idx = 256 * j + i;
+
+    //             printf("%d, ", (int) smSrc[idx_raw]);
+    //             // printf("%d, ", xzBase[j]);
+    //         }
+    //         printf("\n");
+    //     }
+    // }
+
 
     if(x >= width || y >= height)return;
 
     __syncthreads();
 
+    
 
-    // float val[2] = {0.0};
+    float val[2] = {0.0};
 
-    // for (int i = 0; i < MASK_N; ++i) {
-
-    //     for (int v = 0; v <= 4; ++v) {     
-    //         for (int u = 0; u <= 4; ++u) { 
+    for (int i = 0; i < MASK_N; ++i) {
+        for (int v = 0; v <= 4; ++v) {     
+            for (int u = 0; u <= 4; ++u) { 
                 
-    //             val[i] += smSrc[channels * ((BLOCK_N_X + 4) * (tidx_y + v)\
-    //                                         + (tidx_x + u)) + tidx_z] * mask[i][u][v];
+                idx_raw = 256 * (tidx_y + v) + xzBase[tidx_y + v] +\
+                                                 3 * (tidx_x + u) + tidx_z;
 
-    //             // val[i] += s[channels * ((width + 4) * (y + v) + x + u) + z] * mask[i][u][v];
-    //         }
-    //     }
-    // }
+                // if(smSrc[idx] == 0){
+                //     printf("!0\n");
+                // }
 
-    // val[0] = sqrt(val[0]*val[0] + val[1]*val[1]) / SCALE;
+                // printf("%d\n", (int)smSrc[idx]);
 
-    // const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
+                val[i] += smSrc[idx_raw] * mask[i][u][v];
 
-    // t[channels * (width * y + x) + z] = c;
+            }
+        }
+    }
+
+    val[0] = sqrt(val[0]*val[0] + val[1]*val[1]) / SCALE;
+
+    const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
+
+    t[channels * (width * y + x) + z] = c;
 }
 
 

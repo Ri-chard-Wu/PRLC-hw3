@@ -1,14 +1,10 @@
 hw3.cu(69): warning: result of call is not used
 
-hw3.cu(144): warning: variable "mask" was declared but never referenced
-
-hw3.cu(173): warning: variable "z" was declared but never referenced
-
-ptxas info    : 4 bytes gmem
+ptxas info    : 8 bytes gmem
 ptxas info    : Compiling entry function '_Z5sobelPhS_jjj' for 'sm_61'
 ptxas info    : Function properties for _Z5sobelPhS_jjj
     8 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
-ptxas info    : Used 25 registers, 1024 bytes smem, 348 bytes cmem[0]
+ptxas info    : Used 37 registers, 2080 bytes smem, 348 bytes cmem[0], 12 bytes cmem[2]
 hw3.cu(69): warning: result of call is not used
 
 hw3.cu: In function 'int read_png(const char*, unsigned char**, unsigned int*, unsigned int*, unsigned int*)':
