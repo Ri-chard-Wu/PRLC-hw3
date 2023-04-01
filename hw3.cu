@@ -46,11 +46,11 @@ using namespace std;
 
 // #define GRID_N_X
 // #define GRID_N_Y
-#define GRID_N_Z 3
+#define GRID_N_Z 1
 
-#define BLOCK_N_X 32
-#define BLOCK_N_Y 10
-#define BLOCK_N_Z 1
+#define BLOCK_N_X 16
+#define BLOCK_N_Y 8
+#define BLOCK_N_Z 3
 
 // #define BLOCK_N_THREADS
 
@@ -130,6 +130,9 @@ void write_png(const char* filename, png_bytep image, const unsigned height, con
 
 
 
+
+
+
 __global__ void sobel(unsigned char *s, unsigned char *t, 
                                 unsigned height, unsigned width, unsigned channels)
 {
@@ -151,43 +154,53 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
     };
 
-    int basex = blockIdx.x * blockDim.x;
-    int basey = blockIdx.y * blockDim.y;
-    int basez = blockIdx.z * blockDim.z;
-    
-    int nextBasex = basex + blockDim.x;
-    int nextBasey = basey + blockDim.y;
+    const int tidx_z = threadIdx.x;
+    const int tidx_x = threadIdx.y;
+    const int tidx_y = threadIdx.z;
+    const int bidx_z = blockIdx.x;
+    const int bidx_x = blockIdx.y;
+    const int bidx_y = blockIdx.z;
+    const int bdim_z = blockDim.x;
+    const int bdim_x = blockDim.y;
+    const int bdim_y = blockDim.z;
 
-    int x = basex + threadIdx.x;
-    int y = basey + threadIdx.y;
-    int z = basez + threadIdx.z;
+    const int basez = bidx_z * bdim_z;
+    const int basex = bidx_x * bdim_x;
+    const int basey = bidx_y * bdim_y;
+    const int z = basez + tidx_z;
+    const int x = basex + tidx_x;
+    const int y = basey + tidx_y;
 
+    // if(bidx_x == 5 && bidx_y ==5 && bidx_z == 0){
+    //     printf("%d\n", channels * ((width + 4) * y + x) + z);
+    // }
 
-    __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
+    __shared__ unsigned char smSrc[3 * (BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
 
 
     if(x > width + 4 - 1 || y > height + 4 - 1) return;
     
-    smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x] = s[channels * ((width + 4) * y + x) + z];
+    
+    smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z] =\
+                        s[channels * ((width + 4) * y + x) + z];
 
 
-    if((threadIdx.x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
-        smSrc[(BLOCK_N_X + 4) * threadIdx.y + BLOCK_N_X + threadIdx.x] =\
+    if((tidx_x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
+        smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + BLOCK_N_X + tidx_x) + tidx_z] =\
                         s[channels * ((width + 4) * y + BLOCK_N_X + x) + z];
     }
 
-    if((threadIdx.y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
-        smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
+    if((tidx_y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
+        smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z] =\
                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
     }
 
-    if((threadIdx.x < 4) && (threadIdx.y < 4) &&\
-                     (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
-        smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] =\
+    if((tidx_x < 4) && (tidx_y < 4) &&\
+                    (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
+        smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + BLOCK_N_X + tidx_x) + tidx_z] =\
                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
     }
-
-
+    
 
 
     if(x >= width || y >= height)return;
@@ -201,8 +214,8 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
         for (int v = 0; v <= 4; ++v) {     
             for (int u = 0; u <= 4; ++u) { 
-                val[i] += smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + (threadIdx.x + u)]\
-                             * mask[i][u][v];
+                val[i] += smSrc[channels * ((BLOCK_N_X + 4) * (tidx_y + v)\
+                                            + (tidx_x + u)) + tidx_z] * mask[i][u][v];
 
                 // val[i] += s[channels * ((width + 4) * (y + v) + x + u) + z] * mask[i][u][v];
             }
@@ -214,8 +227,107 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
 
     t[channels * (width * y + x) + z] = c;
-
 }
+
+
+
+
+
+
+
+
+
+// __global__ void sobel(unsigned char *s, unsigned char *t, 
+//                                 unsigned height, unsigned width, unsigned channels)
+// {
+
+
+//     int mask[MASK_N][MASK_X][MASK_Y] = {
+    
+//         {{ -1, -4, -6, -4, -1},
+//         { -2, -8,-12, -8, -2},
+//         {  0,  0,  0,  0,  0},
+//         {  2,  8, 12,  8,  2},
+//         {  1,  4,  6,  4,  1}},
+
+//         {{ -1, -2,  0,  2,  1},
+//         { -4, -8,  0,  8,  4},
+//         { -6,-12,  0, 12,  6},
+//         { -4, -8,  0,  8,  4},
+//         { -1, -2,  0,  2,  1}}
+
+//     };
+
+//     int basex = blockIdx.x * blockDim.x;
+//     int basey = blockIdx.y * blockDim.y;
+//     int basez = blockIdx.z * blockDim.z;
+    
+//     int nextBasex = basex + blockDim.x;
+//     int nextBasey = basey + blockDim.y;
+
+//     int x = basex + threadIdx.x;
+//     int y = basey + threadIdx.y;
+//     int z = basez + threadIdx.z;
+
+
+//     // if(blockIdx.x ==5 && blockIdx.y ==5 && blockIdx.z ==0){
+//     //     printf("%d, %d\n", threadIdx.x, threadIdx.y);
+//     // }
+
+
+//     __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
+
+
+//     if(x > width + 4 - 1 || y > height + 4 - 1) return;
+    
+//     smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x] = s[channels * ((width + 4) * y + x) + z];
+
+
+//     if((threadIdx.x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
+//         smSrc[(BLOCK_N_X + 4) * threadIdx.y + BLOCK_N_X + threadIdx.x] =\
+//                         s[channels * ((width + 4) * y + BLOCK_N_X + x) + z];
+//     }
+
+//     if((threadIdx.y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
+//         smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
+//                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
+//     }
+
+//     if((threadIdx.x < 4) && (threadIdx.y < 4) &&\
+//                      (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
+//         smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] =\
+//                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
+//     }
+
+
+
+
+//     if(x >= width || y >= height)return;
+
+//     __syncthreads();
+
+
+//     float val[2] = {0.0};
+
+//     for (int i = 0; i < MASK_N; ++i) {
+
+//         for (int v = 0; v <= 4; ++v) {     
+//             for (int u = 0; u <= 4; ++u) { 
+//                 val[i] += smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + (threadIdx.x + u)]\
+//                              * mask[i][u][v];
+
+//                 // val[i] += s[channels * ((width + 4) * (y + v) + x + u) + z] * mask[i][u][v];
+//             }
+//         }
+//     }
+
+//     val[0] = sqrt(val[0]*val[0] + val[1]*val[1]) / SCALE;
+
+//     const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
+
+//     t[channels * (width * y + x) + z] = c;
+
+// }
 
 
 
@@ -234,11 +346,11 @@ int main(int argc, char** argv) {
 
     gridNx = width / BLOCK_N_X + 1;
     gridNy = height / BLOCK_N_Y + 1;
-    dim3 nThreadsPerBlock(BLOCK_N_X, BLOCK_N_Y, BLOCK_N_Z);
-    dim3 nBlocks(gridNx, gridNy, GRID_N_Z);
+    dim3 nThreadsPerBlock(BLOCK_N_Z, BLOCK_N_X, BLOCK_N_Y);
+    dim3 nBlocks(GRID_N_Z, gridNx, gridNy);
 
     unsigned char *devSrc, *devDst;
-    cudaMalloc(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
+    cudaMallocManaged(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
 
     auto start = high_resolution_clock::now();
 
@@ -255,15 +367,18 @@ int main(int argc, char** argv) {
     start = high_resolution_clock::now();
 
     sobel<<<nBlocks, nThreadsPerBlock>>>(devSrc, devDst, height, width, channels); 
+
     cudaDeviceSynchronize();
 
     stop = high_resolution_clock::now();
     duration = duration_cast<microseconds>(stop - start);
     cout<<"kernel dt: "<<duration.count()<<" us"<<endl;
-    
+
+
 
     unsigned char* dst_img =
         (unsigned char*) malloc(height * width * channels * sizeof(unsigned char));
+
     cudaMemcpy(dst_img, devDst, height * width * channels * sizeof(unsigned char), cudaMemcpyDeviceToHost);
 
     write_png(argv[2], dst_img, height, width, channels);
