@@ -48,7 +48,7 @@ using namespace std;
 // #define GRID_N_Y
 #define GRID_N_Z 3
 
-#define BLOCK_N_X 16
+#define BLOCK_N_X 32
 #define BLOCK_N_Y 8
 #define BLOCK_N_Z 1
 
@@ -251,8 +251,8 @@ int main(int argc, char** argv) {
 
 
     unsigned char *devSrc, *devDst;
-    // cudaMallocManaged(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
-    cudaMalloc(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
+    cudaMallocManaged(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
+    // cudaMalloc(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
 
     auto start = high_resolution_clock::now();
 
