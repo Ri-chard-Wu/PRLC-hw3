@@ -1,17 +1,17 @@
-hw3.cu(63): warning: result of call is not used
+hw3.cu(62): warning: result of call is not used
 
-hw3.cu(239): warning: variable "nextBasex" was declared but never referenced
+hw3.cu(160): warning: variable "nextBasex" was declared but never referenced
 
-hw3.cu(240): warning: variable "nextBasey" was declared but never referenced
+hw3.cu(161): warning: variable "nextBasey" was declared but never referenced
 
-ptxas info    : 22 bytes gmem
+ptxas info    : 0 bytes gmem
 ptxas info    : Compiling entry function '_Z5sobelPhS_jjj' for 'sm_61'
 ptxas info    : Function properties for _Z5sobelPhS_jjj
-    24 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
-ptxas info    : Used 47 registers, 144 bytes smem, 348 bytes cmem[0], 24 bytes cmem[2]
-hw3.cu(63): warning: result of call is not used
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 26 registers, 144 bytes smem, 348 bytes cmem[0], 24 bytes cmem[2]
+hw3.cu(62): warning: result of call is not used
 
 hw3.cu: In function 'int read_png(const char*, unsigned char**, unsigned int*, unsigned int*, unsigned int*)':
-hw3.cu:63:6: warning: ignoring return value of 'size_t fread(void*, size_t, size_t, FILE*)', declared with attribute warn_unused_result [-Wunused-result]
+hw3.cu:62:6: warning: ignoring return value of 'size_t fread(void*, size_t, size_t, FILE*)', declared with attribute warn_unused_result [-Wunused-result]
      fread(sig, 1, 8, infile);
      ~^~~~~~~~~~~~~~~~~~~

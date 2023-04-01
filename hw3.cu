@@ -13,7 +13,6 @@
 
 
 
-
 #define CC_GRID_MAX_X_DIM (1 << 31) - 1
 #define CC_GRID_MAX_Y_DIM 65535
 #define CC_GRID_MAX_Z_DIM 65535
@@ -131,90 +130,12 @@ void write_png(const char* filename, png_bytep image, const unsigned height, con
 
 
 
-// __global__ void sobel(unsigned char *s, unsigned char *t, 
-//                                 unsigned height, unsigned width, unsigned channels)
-// {
-
-//     int mask[MASK_N][MASK_X][MASK_Y] = {
-    
-//         {{ -1, -4, -6, -4, -1},
-//         { -2, -8,-12, -8, -2},
-//         {  0,  0,  0,  0,  0},
-//         {  2,  8, 12,  8,  2},
-//         {  1,  4,  6,  4,  1}},
-
-//         {{ -1, -2,  0,  2,  1},
-//         { -4, -8,  0,  8,  4},
-//         { -6,-12,  0, 12,  6},
-//         { -4, -8,  0,  8,  4},
-//         { -1, -2,  0,  2,  1}}
-
-//     };
-
-//     int basex = blockIdx.x * blockDim.x;
-//     int basey = blockIdx.y * blockDim.y;
-    
-//     int nextBasex = (blockIdx.x + 1) * blockDim.x;
-//     int nextBasey = (blockIdx.y + 1) * blockDim.y;
-
-//     int x = blockIdx.x * blockDim.x + threadIdx.x;
-//     int y = blockIdx.y * blockDim.y + threadIdx.y;
-//     int z = blockIdx.z * blockDim.z + threadIdx.z;
-
-
-//     // printf("threadIdx.x: %d, blockIdx.x: %d, blockDim.x: %d\n", threadIdx.x, blockIdx.x, blockDim.x);
-
-//     if(x >= width || y >= height) return;
-
-
-
-//     __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
-
-//     smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x] = s[3 * ((width + 4) * y + x) + z];
-    
-//     if(threadIdx.x < 4){
-//         smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x + BLOCK_N_X] =\
-//                     s[3 * ((width + 4) * (basey + threadIdx.y) + nextBasex + threadIdx.x) + z];
-//     }
-    
-//     if(threadIdx.y < 4){
-//         smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
-//                     s[3 * ((width + 4) * (nextBasey + threadIdx.y) + basex + threadIdx.x) + z];
-//     }
-
-//     if(threadIdx.x < 4 && threadIdx.y < 4){
-//         smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] = \
-//                     s[3 * ((width + 4) * (nextBasey + threadIdx.y) + nextBasex + threadIdx.x) + z];
-//     }
-
-    
-
-//     __syncthreads();
-
-    
-
-//     double val[MASK_N] = {0.0};
-    
-//     for (int i = 0; i < MASK_N; ++i){
-//         for (int v = 0; v < 5; ++v){
-//             for (int u = 0; u < 5; ++u){
-//                 val[i] += ((int)smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + threadIdx.x + u]) * mask[i][u][v];
-//             }
-//         }
-//     }
-
-//     val[0] = sqrt(val[0] * val[0] + val[1] * val[1]) / SCALE;
-//     t[3 * (width * y + x) + z] = (val[0] > 255.0) ? 255 : val[0];
-// }
-
-
-
-
-
-
 __global__ void sobel(unsigned char *s, unsigned char *t, 
                                 unsigned height, unsigned width, unsigned channels)
 {
+
+
+    
 
     int mask[MASK_N][MASK_X][MASK_Y] = {
     
@@ -243,81 +164,123 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     int y = basey + threadIdx.y;
     int z = basez + threadIdx.z;
 
-    if(x >= width || y >= height)return;
+
+
+    // if(y == height - 1 && x == 10 && z == 0){
+        
+    //     // printf("z: %d\n", z);
+
+    //     for (int v = 0; v <= 4; ++v) {     
+    //         for (int u = 0; u <= 4; ++u) { 
+    //             printf("%d\n", (int)s[channels * ((width + 4) * (v + y) + x + u) + z]);
+    //         }
+    //     }
+    // }    
+
+
 
     __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
 
+
+    if(x > width + 4 - 1 || y > height + 4 - 1) return;
+    
     smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x] = s[channels * ((width + 4) * y + x) + z];
+    
+    
 
-    if(threadIdx.x < 4){
+    if((threadIdx.x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
         smSrc[(BLOCK_N_X + 4) * threadIdx.y + BLOCK_N_X + threadIdx.x] =\
-                         s[channels * ((width + 4) * y + BLOCK_N_X + x) + z];
+                        s[channels * ((width + 4) * y + BLOCK_N_X + x) + z];
     }
 
-    if(threadIdx.y < 4){
+    if((threadIdx.y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
+
+        // if(BLOCK_N_Y + y == height + 4 - 1){
+        //     printf("%d, %d, %d\n", x, threadIdx.y, threadIdx.x);
+        // }
+
         smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
-                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
+                        s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
     }
 
-    if(threadIdx.x < 4 && threadIdx.y < 4){
+    if((threadIdx.x < 4) && (threadIdx.y < 4) &&\
+                     (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
         smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] =\
-                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
+                        s[channels * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
     }
 
+
+    if(x >= width || y >= height)return;
 
     __syncthreads();
 
-    if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0){
 
-        for(int dx=0; dx < BLOCK_N_X + 4; dx++) {
-            for(int dy=0; dy < BLOCK_N_Y + 4; dy++) {
+    // if(y == height - 1 && x == 10){
+        
+    //     printf("z: %d\n", z);
 
-                if(smSrc[(BLOCK_N_X + 4) * dy + dx] !=\
-                    s[channels * ((width + 4) * (basey + dy) + basex + dx) + z]){
+    //     for (int v = 0; v <= 4; ++v) {     
+    //         for (int u = 0; u <= 4; ++u) { 
+    //             printf("%d\n", (int)s[channels * ((width + 4) * (v + y) + x + u) + z]);
+    //         }
+    //     }
+    // }    
+
+    // if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0){
+
+    //     for(int dx=0; dx < BLOCK_N_X + 4; dx++) {
+    //         for(int dy=0; dy < BLOCK_N_Y + 4; dy++) {
+    //             if(basey + dy > height + 4 - 1 || basex + dx > width + 4 - 1)continue;
+
+    //             if(smSrc[(BLOCK_N_X + 4) * dy + dx] !=\
+    //                 s[channels * ((width + 4) * (basey + dy) + basex + dx) + z]){
                 
-                        printf("%d/%d, %d/%d, %d, %d\n", basex + dx, width, basey + dy, height,
-                        smSrc[(BLOCK_N_X + 4) * dy + dx], 
-                        s[channels * ((width + 4) * (basey + dy) + basex + dx) + z]);
+    //                     printf("%d/%d, %d/%d, %d, %d\n", basex + dx, width, basey + dy, height,
+    //                     smSrc[(BLOCK_N_X + 4) * dy + dx], 
+    //                     s[channels * ((width + 4) * (basey + dy) + basex + dx) + z]);
 
-                }
+    //             }
 
-            }
-        }
+    //         }
+    //     }
 
-    }
+    // }
 
 
 
     double val[2] = {0.0};
 
     for (int i = 0; i < MASK_N; ++i) {
+
+        // if(y == height - 1 && x == 10 && z == 0){
+        //     printf("\n");
+        // }        
+        
         for (int v = 0; v <= 4; ++v) {     
             for (int u = 0; u <= 4; ++u) { 
+
+                // if(y == height - 1 && x == 10 && z == 0){
+                //     printf("smSrc[%d, %d]: %d\n", threadIdx.x + u, threadIdx.y + v, 
+                //      (int)smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + (threadIdx.x + u)]);
+                // }
+                
                 val[i] += smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + (threadIdx.x + u)]\
-                 * mask[i][u][v];
+                             * mask[i][u][v];
             }
         }
     }
 
+    // if(y == height - 1 && x == 10){
+    //     printf("c: %f, %f\n", val[0], val[1]);
+    // }
+
     val[0] = sqrt(val[0]*val[0] + val[1]*val[1]) / SCALE;
 
-    // if(y==619 && x == 800){
-    //     printf("val[0]: %f\n", val[0]);
-    // }
 
-    // for(int srcx=0; srcx < width + 4; srcx++){
-    //     for(int srcy=0; srcy < height + 4; srcy++){
-    //         if((srcx >= 2) && (srcx <= width + 1) && (srcy >= 2) && (srcy <= width + 1))continue;
-
-    //         for(int srcz=0;srcz<3;srcz++){
-    //             if(!s[channels * ((width + 4) * srcy + srcx) + srcz]){
-    //                 printf("!0: src_img[i]: %d\n", (int)s[channels * ((width + 4) * srcy + srcx) + srcz]);
-    //             }
-    //         }
-    //     }        
-    // }
 
     const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
+
+
 
 
 
@@ -341,6 +304,17 @@ int main(int argc, char** argv) {
     // cc_check_param(width, height);
 
 
+
+    // int y = height - 1, x = 10, z = 0;
+    // for (int v = 0; v <= 4; ++v) {     
+    //     for (int u = 0; u <= 4; ++u) { 
+    //         printf("%d\n", (int)src_img[channels * ((width + 4) * (v + y) + x + u) + z]);
+    //     }
+    // }
+
+
+
+
     gridNx = width / BLOCK_N_X + 1;
     gridNy = height / BLOCK_N_Y + 1;
     dim3 nThreadsPerBlock(BLOCK_N_X, BLOCK_N_Y, BLOCK_N_Z);
@@ -348,7 +322,8 @@ int main(int argc, char** argv) {
 
     unsigned char *devSrc, *devDst;
     cudaMalloc(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
-    cudaMemcpy(devSrc, src_img, height * width * channels * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    cudaMemcpy(devSrc, src_img, (height + 4) * (width + 4) * channels * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    
     // printf(" (height + 4) * (width + 4) * channels: %d\n",  (height + 4) * (width + 4) * channels);
     // for(int x=0; x < width + 4; x++){
     //     for(int y=0; y < height + 4; y++){
