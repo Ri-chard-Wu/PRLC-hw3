@@ -5,6 +5,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <chrono>
+
+using namespace std::chrono;
+using namespace std;
 
 #define MASK_N 2
 #define MASK_X 5
@@ -86,10 +90,6 @@ int read_png(const char* filename, unsigned char** image, unsigned* height, unsi
     rowbytes = png_get_rowbytes(png_ptr, info_ptr);
     *channels = (int)png_get_channels(png_ptr, info_ptr);
 
-
-    // printf("rowbytes: %d\n", rowbytes);
-    // printf("(rowbytes + 4*3) * (*height + 4): %d\n", (rowbytes + 4*3) * (*height + 4));
-    
     if ((*image = (unsigned char*)calloc((rowbytes + 4*3) * (*height + 4), 1)) == NULL) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return 3;
@@ -135,8 +135,6 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 {
 
 
-    
-
     int mask[MASK_N][MASK_X][MASK_Y] = {
     
         {{ -1, -4, -6, -4, -1},
@@ -165,20 +163,6 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     int z = basez + threadIdx.z;
 
 
-
-    // if(y == height - 1 && x == 10 && z == 0){
-        
-    //     // printf("z: %d\n", z);
-
-    //     for (int v = 0; v <= 4; ++v) {     
-    //         for (int u = 0; u <= 4; ++u) { 
-    //             printf("%d\n", (int)s[channels * ((width + 4) * (v + y) + x + u) + z]);
-    //         }
-    //     }
-    // }    
-
-
-
     __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
 
 
@@ -194,10 +178,6 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     }
 
     if((threadIdx.y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
-
-        // if(BLOCK_N_Y + y == height + 4 - 1){
-        //     printf("%d, %d, %d\n", x, threadIdx.y, threadIdx.x);
-        // }
 
         smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
@@ -215,74 +195,23 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     __syncthreads();
 
 
-    // if(y == height - 1 && x == 10){
-        
-    //     printf("z: %d\n", z);
-
-    //     for (int v = 0; v <= 4; ++v) {     
-    //         for (int u = 0; u <= 4; ++u) { 
-    //             printf("%d\n", (int)s[channels * ((width + 4) * (v + y) + x + u) + z]);
-    //         }
-    //     }
-    // }    
-
-    // if(threadIdx.x == 0 && threadIdx.y == 0 && threadIdx.z == 0){
-
-    //     for(int dx=0; dx < BLOCK_N_X + 4; dx++) {
-    //         for(int dy=0; dy < BLOCK_N_Y + 4; dy++) {
-    //             if(basey + dy > height + 4 - 1 || basex + dx > width + 4 - 1)continue;
-
-    //             if(smSrc[(BLOCK_N_X + 4) * dy + dx] !=\
-    //                 s[channels * ((width + 4) * (basey + dy) + basex + dx) + z]){
-                
-    //                     printf("%d/%d, %d/%d, %d, %d\n", basex + dx, width, basey + dy, height,
-    //                     smSrc[(BLOCK_N_X + 4) * dy + dx], 
-    //                     s[channels * ((width + 4) * (basey + dy) + basex + dx) + z]);
-
-    //             }
-
-    //         }
-    //     }
-
-    // }
-
-
-
-    double val[2] = {0.0};
+    float val[2] = {0.0};
 
     for (int i = 0; i < MASK_N; ++i) {
 
-        // if(y == height - 1 && x == 10 && z == 0){
-        //     printf("\n");
-        // }        
-        
         for (int v = 0; v <= 4; ++v) {     
             for (int u = 0; u <= 4; ++u) { 
-
-                // if(y == height - 1 && x == 10 && z == 0){
-                //     printf("smSrc[%d, %d]: %d\n", threadIdx.x + u, threadIdx.y + v, 
-                //      (int)smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + (threadIdx.x + u)]);
-                // }
-                
                 val[i] += smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + (threadIdx.x + u)]\
                              * mask[i][u][v];
+
+                // val[i] += s[channels * ((width + 4) * (y + v) + x + u) + z] * mask[i][u][v];
             }
         }
     }
 
-    // if(y == height - 1 && x == 10){
-    //     printf("c: %f, %f\n", val[0], val[1]);
-    // }
-
     val[0] = sqrt(val[0]*val[0] + val[1]*val[1]) / SCALE;
 
-
-
     const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
-
-
-
-
 
     t[channels * (width * y + x) + z] = c;
 
@@ -301,18 +230,6 @@ int main(int argc, char** argv) {
     read_png(argv[1], &src_img, &height, &width, &channels);
     assert(channels == 3);
     printf("width x height: %d x %d\n", width, height);
-    // cc_check_param(width, height);
-
-
-
-    // int y = height - 1, x = 10, z = 0;
-    // for (int v = 0; v <= 4; ++v) {     
-    //     for (int u = 0; u <= 4; ++u) { 
-    //         printf("%d\n", (int)src_img[channels * ((width + 4) * (v + y) + x + u) + z]);
-    //     }
-    // }
-
-
 
 
     gridNx = width / BLOCK_N_X + 1;
@@ -323,27 +240,18 @@ int main(int argc, char** argv) {
     unsigned char *devSrc, *devDst;
     cudaMalloc(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
     cudaMemcpy(devSrc, src_img, (height + 4) * (width + 4) * channels * sizeof(unsigned char), cudaMemcpyHostToDevice);
-    
-    // printf(" (height + 4) * (width + 4) * channels: %d\n",  (height + 4) * (width + 4) * channels);
-    // for(int x=0; x < width + 4; x++){
-    //     for(int y=0; y < height + 4; y++){
-    //         if((x >= 2) && (x <= width + 1) && (y >= 2) && (y <= width + 1))continue;
-
-    //         for(int z=0;z<3;z++){
-    //             if(src_img[channels * ((width + 4) * y + x) + z]){
-    //                 printf("!0: src_img[i]: %d\n", (int)src_img[channels * ((width + 4) * y + x) + z]);
-    //             }
-    //         }
-    //     }        
-    // }
-    
-    
-
 
     cudaMalloc(&devDst, height * width * channels * sizeof(unsigned char));
 
+
+    auto start = high_resolution_clock::now();
+
     sobel<<<nBlocks, nThreadsPerBlock>>>(devSrc, devDst, height, width, channels); 
     cudaDeviceSynchronize();
+
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+    cout<<"dt: "<<duration.count()<<" us"<<endl;
     
 
     unsigned char* dst_img =
@@ -362,50 +270,3 @@ int main(int argc, char** argv) {
 
 
 
-
-
-
-
-
-// #include <stdio.h>
-
-// __global__
-// void saxpy(int n, unsigned char a, unsigned char *x, unsigned char *y)
-// {
-//     int i = blockIdx.x*blockDim.x + threadIdx.x;
-//     if (i < n) y[i] = a*x[i] + y[i];
-// }
-
-// int main(void)
-// {
-//     int N = 1<<20;
-//     unsigned char *x, *y, *d_x, *d_y;
-//     x = (unsigned char*)malloc(N*sizeof(unsigned char));
-//     y = (unsigned char*)malloc(N*sizeof(unsigned char));
-
-//     cudaMalloc(&d_x, N*sizeof(unsigned char)); 
-//     cudaMalloc(&d_y, N*sizeof(unsigned char));
-
-//     for (int i = 0; i < N; i++) {
-//         x[i] = 1.0f;
-//         y[i] = 2.0f;
-//     }
-
-//     cudaMemcpy(d_x, x, N*sizeof(unsigned char), cudaMemcpyHostToDevice);
-//     cudaMemcpy(d_y, y, N*sizeof(unsigned char), cudaMemcpyHostToDevice);
-
-//     // Perform SAXPY on 1M elements
-//     saxpy<<<(N+255)/256, 256>>>(N, 2, d_x, d_y);
-
-//     cudaMemcpy(y, d_y, N*sizeof(unsigned char), cudaMemcpyDeviceToHost);
-
-//     // unsigned char maxError = 0.0f;
-//     // for (int i = 0; i < N; i++)
-//     //     maxError = max(maxError, abs(y[i]-4.0f));
-//     // printf("Max error: %f\n", maxError);
-
-//     cudaFree(d_x);
-//     cudaFree(d_y);
-//     free(x);
-//     free(y);
-// }
