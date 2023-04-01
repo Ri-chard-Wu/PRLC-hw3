@@ -46,11 +46,11 @@ using namespace std;
 
 // #define GRID_N_X
 // #define GRID_N_Y
-#define GRID_N_Z 1
+#define GRID_N_Z 3
 
-#define BLOCK_N_X 8
-#define BLOCK_N_Y 8
-#define BLOCK_N_Z 3
+#define BLOCK_N_X 32
+#define BLOCK_N_Y 10
+#define BLOCK_N_Z 1
 
 // #define BLOCK_N_THREADS
 
@@ -163,35 +163,31 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     int z = basez + threadIdx.z;
 
 
-    __shared__ unsigned char smSrc[3 * (BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
+    __shared__ unsigned char smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
 
 
     if(x > width + 4 - 1 || y > height + 4 - 1) return;
     
-    
-    smSrc[channels * ((BLOCK_N_X + 4) * threadIdx.y + threadIdx.x) + threadIdx.z] =\
-            s[channels * ((width + 4) * y + x) + z];
+    smSrc[(BLOCK_N_X + 4) * threadIdx.y + threadIdx.x] = s[channels * ((width + 4) * y + x) + z];
 
 
     if((threadIdx.x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
-        smSrc[channels * ((BLOCK_N_X + 4) * threadIdx.y + BLOCK_N_X + threadIdx.x) + threadIdx.z] =\
+        smSrc[(BLOCK_N_X + 4) * threadIdx.y + BLOCK_N_X + threadIdx.x] =\
                         s[channels * ((width + 4) * y + BLOCK_N_X + x) + z];
     }
 
     if((threadIdx.y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
-        smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + threadIdx.x) + threadIdx.z] =\
+        smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + threadIdx.x] =\
                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
     }
 
     if((threadIdx.x < 4) && (threadIdx.y < 4) &&\
-                    (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
-        smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x) + threadIdx.z] =\
+                     (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
+        smSrc[(BLOCK_N_X + 4) * (BLOCK_N_Y + threadIdx.y) + BLOCK_N_X + threadIdx.x] =\
                         s[channels * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
     }
-    
 
 
-// channels * () + threadIdx.z
 
 
     if(x >= width || y >= height)return;
@@ -205,8 +201,8 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
         for (int v = 0; v <= 4; ++v) {     
             for (int u = 0; u <= 4; ++u) { 
-                val[i] += smSrc[channels * ((BLOCK_N_X + 4) * (threadIdx.y + v)\
-                                            + (threadIdx.x + u)) + threadIdx.z] * mask[i][u][v];
+                val[i] += smSrc[(BLOCK_N_X + 4) * (threadIdx.y + v) + (threadIdx.x + u)]\
+                             * mask[i][u][v];
 
                 // val[i] += s[channels * ((width + 4) * (y + v) + x + u) + z] * mask[i][u][v];
             }
@@ -218,7 +214,6 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
 
     t[channels * (width * y + x) + z] = c;
-
 
 }
 
