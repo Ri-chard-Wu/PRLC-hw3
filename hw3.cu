@@ -190,7 +190,8 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     if(tidx_x < 8 && tidx_z == 0){ // (((BLOCK_N_X + 4) * 3) / 16) + 2 == 8
         
         idx_raw = (channels * ((width + 4) * y + basex) + z);
-        idx_divRound =  (idx_raw / 16);
+        // idx_divRound =  (idx_raw / 16);
+        idx_divRound =  (idx_raw >> 4);
         xzBase[tidx_y] = idx_raw - idx_divRound * 16;
         idx_divRound += tidx_x;
 
@@ -198,7 +199,8 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
         if(BLOCK_N_Y + y <= height + 4 - 1){
             idx_raw = (channels * ((width + 4) * (BLOCK_N_Y + y) + basex) + z);
-            idx_divRound = idx_raw / 16;
+            // idx_divRound = idx_raw / 16;
+            idx_divRound =  (idx_raw >> 4);
             xzBase[BLOCK_N_Y + tidx_y] = idx_raw - idx_divRound * 16;  
             idx_divRound += tidx_x;
 
