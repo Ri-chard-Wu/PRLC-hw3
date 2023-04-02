@@ -173,70 +173,39 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const int x = basex + tidx_x;
     const int y = basey + tidx_y;
 
-    __shared__ unsigned char smSrc[256 * (BLOCK_N_Y + 4)];
+    __shared__ unsigned char smSrc[128 * (BLOCK_N_Y + 4)];
     __shared__ unsigned int xzBase[BLOCK_N_Y + 4];
 
 
     if(x > width + 4 - 1 || y > height + 4 - 1) return;
     
-    
-    int idx_lower, idx_upper, idx_raw;
 
-    if(tidx_x == 0 && tidx_z == 0){
+    // if(y == 26 && x == 150 && z == 1){
+    //     reinterpret_cast<int4 *>(t)[0] = reinterpret_cast<int4 *>(s)[0];
+    // }
+
+
+    int idx_raw, idx_divRound;
+
+    if(tidx_x < 8 && tidx_z == 0){ // (((BLOCK_N_X + 4) * 3) / 16) + 2 == 8
         
-        idx_raw = (channels * ((width + 4) * y + x) + z);
-        idx_lower = idx_raw / 128;
-        idx_upper = idx_lower + 1;
-        xzBase[tidx_y] = idx_raw - idx_lower * 128;
+        idx_raw = (channels * ((width + 4) * y + basex) + z);
+        idx_divRound =  (idx_raw / 16);
+        xzBase[tidx_y] = idx_raw - idx_divRound * 16;
+        idx_divRound += tidx_x;
 
-        reinterpret_cast<int4*>(smSrc)[2 * tidx_y + 0] = reinterpret_cast<int4*>(s)[idx_lower];
-        reinterpret_cast<int4*>(smSrc)[2 * tidx_y + 1] = reinterpret_cast<int4*>(s)[idx_upper];
+        reinterpret_cast<int4*>(smSrc)[8 * tidx_y + tidx_x] = reinterpret_cast<int4*>(s)[idx_divRound];
 
         if(BLOCK_N_Y + y <= height + 4 - 1){
+            idx_raw = (channels * ((width + 4) * (BLOCK_N_Y + y) + basex) + z);
+            idx_divRound = idx_raw / 16;
+            xzBase[BLOCK_N_Y + tidx_y] = idx_raw - idx_divRound * 16;  
+            idx_divRound += tidx_x;
 
-            idx_raw = (channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z);
-            idx_lower = idx_raw / 128;
-            idx_upper = idx_lower + 1;
-            xzBase[BLOCK_N_Y + tidx_y] = idx_raw - idx_lower * 128;
-                        
-            reinterpret_cast<int4*>(smSrc)[2 * (BLOCK_N_Y + tidx_y) + 0] =\
-                     reinterpret_cast<int4*>(s)[idx_lower];
-
-            reinterpret_cast<int4*>(smSrc)[2 * (BLOCK_N_Y + tidx_y) + 1] =\
-                     reinterpret_cast<int4*>(s)[idx_upper];
-        }
-        
-    }
-
-
-    if(y == 26 && x == 150 && z == 1){
-        for(int j=0; j < BLOCK_N_Y + 4;j++){
-            for(int i=0; i < (32 + 4) * 3; i++){
-        
-                if(smSrc[256 * j + xzBase[j] + i] != s[3 * (width + 4) * (basey + j) + i]){
-                    // printf("==\n");
-                    printf("%d, %d\n", smSrc[256 * j + xzBase[j] + i], s[3 * (width + 4) * (basey + j) + i]);
-                }
-            }
+            reinterpret_cast<int4*>(smSrc)[8 * (BLOCK_N_Y + tidx_y) + tidx_x] =\
+                     reinterpret_cast<int4*>(s)[idx_divRound];
         }
     }
-
-
-
-    // if(tidx_x == 2 && tidx_z == 0){
-    //     for(int i=0; i < 32 * 3; i++){
-    //         for(int j=0;j<BLOCK_N_Y + 4;j++){
-
-    //             idx_raw = 256 * j + xzBase[j] + i;
-
-    //             // idx = 256 * j + i;
-
-    //             printf("%d, ", (int) smSrc[idx_raw]);
-    //             // printf("%d, ", xzBase[j]);
-    //         }
-    //         printf("\n");
-    //     }
-    // }
 
 
     if(x >= width || y >= height)return;
@@ -251,15 +220,8 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
         for (int v = 0; v <= 4; ++v) {     
             for (int u = 0; u <= 4; ++u) { 
                 
-                idx_raw = 256 * (tidx_y + v) + xzBase[tidx_y + v] +\
+                idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] +\
                                                  3 * (tidx_x + u) + tidx_z;
-
-                // if(smSrc[idx] == 0){
-                //     printf("!0\n");
-                // }
-
-                // printf("%d\n", (int)smSrc[idx]);
-
                 val[i] += smSrc[idx_raw] * mask[i][u][v];
 
             }
@@ -307,9 +269,7 @@ int main(int argc, char** argv) {
     auto duration = duration_cast<microseconds>(stop - start);
     cout<<"cudaMemcpy src_img dt: "<<duration.count()<<" us"<<endl;
 
-    
     cudaMalloc(&devDst, height * width * channels * sizeof(unsigned char));
-
 
     start = high_resolution_clock::now();
 
@@ -321,13 +281,11 @@ int main(int argc, char** argv) {
     duration = duration_cast<microseconds>(stop - start);
     cout<<"kernel dt: "<<duration.count()<<" us"<<endl;
 
-
-
     unsigned char* dst_img =
         (unsigned char*) malloc(height * width * channels * sizeof(unsigned char));
 
     cudaMemcpy(dst_img, devDst, height * width * channels * sizeof(unsigned char), cudaMemcpyDeviceToHost);
-
+    
     write_png(argv[2], dst_img, height, width, channels);
 
     cudaFree(devSrc);
@@ -339,3 +297,105 @@ int main(int argc, char** argv) {
 }
 
 
+
+
+
+// ###############################################################
+
+
+
+
+
+// // typedef int data_t;
+// typedef unsigned char data_t;
+
+// __global__ void device_copy_vector4_kernel(data_t* d_in, data_t* d_out, int N) {
+    
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+//     // for(int i = idx; i < N/4; i += blockDim.x * gridDim.x) {
+//     for(int i = idx; i < 1; i += blockDim.x * gridDim.x) {
+        
+//         printf("%d\n", i);
+        
+//         reinterpret_cast<int4*>(d_out)[i] = reinterpret_cast<int4*>(d_in)[i];
+//     }
+// }
+
+
+
+
+// int main() {
+    
+//     int size = 128;
+//     data_t d_out[size], d_in[size], *d_in_dev, *d_out_dev;
+
+
+//     cudaMalloc(&d_in_dev, size * sizeof(data_t));
+//     cudaMalloc(&d_out_dev, size * sizeof(data_t));
+
+//     for(int i=0;i<size;i++){
+//         d_in[i] = (data_t)i;
+//     }
+    
+//     cudaMemcpy(d_in_dev, d_in, size * sizeof(data_t), cudaMemcpyHostToDevice);
+
+//     device_copy_vector4_kernel<<<1, 1>>>(d_in_dev, d_out_dev, size);
+
+//     cudaMemcpy(d_out, d_out_dev, size * sizeof(data_t), cudaMemcpyDeviceToHost);
+
+
+//     for(int i=0;i<size;i++){
+//         printf("%d:, %d\n", i, (int)d_out[i]);
+//     }
+
+//     return 0;
+// }
+
+
+
+
+// ###############################################################
+
+
+
+
+
+// __global__ void device_copy_vector4_kernel(int* d_in, int* d_out, int N) {
+    
+//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+//     for(int i = idx; i < N/4; i += blockDim.x * gridDim.x) {
+//             reinterpret_cast<int4*>(d_out)[i] = reinterpret_cast<int4*>(d_in)[i];
+//     }
+// }
+
+
+
+
+// int main() {
+    
+//     int size = 128;
+//     int d_out[size], d_in[size];
+//     int *d_in_dev, *d_out_dev;
+
+//     cudaMalloc(&d_in_dev, size * sizeof(int));
+//     cudaMalloc(&d_out_dev, size * sizeof(int));
+
+//     for(int i=0;i<size;i++){
+//         d_in[i] = i;
+//     }
+    
+//     cudaMemcpy(d_in_dev, d_in, size * sizeof(int), cudaMemcpyHostToDevice);
+
+//     device_copy_vector4_kernel<<<1, 1>>>(d_in_dev, d_out_dev, size);
+
+//     cudaMemcpy(d_out, d_out_dev, size * sizeof(int), cudaMemcpyDeviceToHost);
+
+
+//     for(int i=0;i<size;i++){
+//         printf("%d:, %d\n", i, d_out[i]);
+//     }
+
+//     return 0;
+// }
