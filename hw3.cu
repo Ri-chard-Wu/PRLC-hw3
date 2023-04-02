@@ -174,6 +174,7 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const int y = basey + tidx_y;
 
     __shared__ unsigned char smSrc[128 * (BLOCK_N_Y + 4)];
+    // __shared__ unsigned char smDst[128 * (BLOCK_N_Y + 4)];
     __shared__ unsigned int xzBase[BLOCK_N_Y + 4];
 
 
@@ -185,34 +186,39 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     // }
 
 
-    int idx_raw, idx_divRound;
+    int idx_raw, idx_divRound, y_group, char_batch_idx;
 
-    if(tidx_x < 8 && tidx_z == 0){ // (((BLOCK_N_X + 4) * 3) / 16) + 2 == 8
+    if(tidx_x < 8 && tidx_z < 2){ // (((BLOCK_N_X + 4) * 3) / 16) + 2 == 8
         
-        idx_raw = (channels * ((width + 4) * y + basex) + z);
-        // idx_divRound =  (idx_raw / 16);
+        y_group = (tidx_x + 8 * tidx_z) / 8; // z == 0 -> group 0; z == 1 -> group 1;          
+        char_batch_idx = (tidx_x + 8 * tidx_z) - y_group * 8; // == (tidx_x + 8 * tidx_z) % 8.
+        
+        y_group = y_group - y_group * ((BLOCK_N_Y + y - 1) / (height + 4 - 1));
+
+
+        idx_raw = (channels * ((width + 4) * (y_group * BLOCK_N_Y + y) + basex) + basez);
         idx_divRound =  (idx_raw >> 4);
-        xzBase[tidx_y] = idx_raw - idx_divRound * 16;
-        idx_divRound += tidx_x;
+        xzBase[y_group * BLOCK_N_Y + tidx_y] = idx_raw - idx_divRound * 16;
+        idx_divRound += char_batch_idx;
 
-        reinterpret_cast<int4*>(smSrc)[8 * tidx_y + tidx_x] = reinterpret_cast<int4*>(s)[idx_divRound];
-
-        if(BLOCK_N_Y + y <= height + 4 - 1){
-            idx_raw = (channels * ((width + 4) * (BLOCK_N_Y + y) + basex) + z);
-            // idx_divRound = idx_raw / 16;
-            idx_divRound =  (idx_raw >> 4);
-            xzBase[BLOCK_N_Y + tidx_y] = idx_raw - idx_divRound * 16;  
-            idx_divRound += tidx_x;
-
-            reinterpret_cast<int4*>(smSrc)[8 * (BLOCK_N_Y + tidx_y) + tidx_x] =\
-                     reinterpret_cast<int4*>(s)[idx_divRound];
-        }
+        reinterpret_cast<int4*>(smSrc)[8 * (y_group * BLOCK_N_Y + tidx_y) + char_batch_idx] =\
+                                            reinterpret_cast<int4*>(s)[idx_divRound];
     }
 
 
     if(x >= width || y >= height)return;
 
     __syncthreads();
+
+
+
+    // if(y == 26 && x == 150 && z == 1){
+    //     for(int i=0;i<128;i++){
+    //         for(int j=0;j<8;j++){
+    //             printf("%d: %d\n", i, smSrc[128 * j + i]);
+    //         }            
+    //     }
+    // }
 
     
 
@@ -233,8 +239,31 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     val[0] = sqrt(val[0]*val[0] + val[1]*val[1]) / SCALE;
 
     const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
+    
+    // smDst[128 * tidx_y + 3 * tidx_x + tidx_z] = c;
+
+    // __syncthreads();
 
     t[channels * (width * y + x) + z] = c;
+
+
+    // if(tidx_x < 8 && tidx_z == 0){ // (((BLOCK_N_X + 4) * 3) / 16) + 2 == 8
+        
+    //     idx_raw = (channels * (width  * y + basex) + z);
+    //     idx_divRound = (idx_raw >> 4) + tidx_x;
+
+    //     reinterpret_cast<int4*>(t)[8 * tidx_y + tidx_x] =\
+    //                                  reinterpret_cast<int4*>(smDst)[idx_divRound];
+
+        // if(BLOCK_N_Y + y <= height + 4 - 1){
+        //     idx_raw = (channels * ((width + 4) * (BLOCK_N_Y + y) + basex) + z);
+        //     idx_divRound =  (idx_raw >> 4);
+        //     idx_divRound += tidx_x;
+
+        //     reinterpret_cast<int4*>(smSrc)[8 * (BLOCK_N_Y + tidx_y) + tidx_x] =\
+        //              reinterpret_cast<int4*>(s)[idx_divRound];
+        // }
+    // }
 }
 
 
