@@ -51,7 +51,7 @@ using namespace std;
 
 // rule1: x, y >= 4
 // rule2: x be multiple of 4.
-#define BLOCK_N_X 32  
+#define BLOCK_N_X 32
 #define BLOCK_N_Y 4
 #define BLOCK_N_Z 3
 
@@ -173,7 +173,13 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const int x = basex + tidx_x;
     const int y = basey + tidx_y;
 
-    __shared__ unsigned char smSrc[128 * (BLOCK_N_Y + 4)];
+    int idx_raw, idx_divRound, y_group, char_batch_idx;
+
+    const int n_char_per_batch = 16;
+    const int n_char_batch = (((BLOCK_N_X + 4) * 3) / n_char_per_batch) + 2;
+    const int n_char = n_char_batch * n_char_per_batch;
+
+    __shared__ unsigned char smSrc[n_char * (BLOCK_N_Y + 4)];
     // __shared__ unsigned char smDst[128 * (BLOCK_N_Y + 4)];
     __shared__ unsigned int xzBase[BLOCK_N_Y + 4];
 
@@ -186,23 +192,28 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     // }
 
 
-    int idx_raw, idx_divRound, y_group, char_batch_idx;
 
-    if(tidx_x < 8 && tidx_z < 2){ // (((BLOCK_N_X + 4) * 3) / 16) + 2 == 8
+
+    if(tidx_x < n_char_batch && tidx_z < 2){ // (((BLOCK_N_X + 4) * 3) / 16) + 2 == 8
         
-        y_group = (tidx_x + 8 * tidx_z) / 8; // z == 0 -> group 0; z == 1 -> group 1;          
-        char_batch_idx = (tidx_x + 8 * tidx_z) - y_group * 8; // == (tidx_x + 8 * tidx_z) % 8.
+        y_group = (tidx_x + n_char_batch * tidx_z) / n_char_batch; // z == 0 -> group 0; z == 1 -> group 1;          
+        char_batch_idx = (tidx_x + n_char_batch * tidx_z) - y_group * n_char_batch; // == (tidx_x + 8 * tidx_z) % 8.
         
-        y_group = y_group - y_group * ((BLOCK_N_Y + y - 1) / (height + 4 - 1));
+        // y_group = y_group - y_group * ((BLOCK_N_Y + y - 1) / (height + 4 - 1));
+
+        if((BLOCK_N_Y + y) > (height + 4 - 1)){
+            y_group = y_group - y_group;
+        }
+        
 
 
-        idx_raw = (channels * ((width + 4) * (y_group * BLOCK_N_Y + y) + basex) + basez);
+        idx_raw = (3 * ((width + 4) * (y_group * BLOCK_N_Y + y) + basex) + basez);
         idx_divRound =  (idx_raw >> 4);
         xzBase[y_group * BLOCK_N_Y + tidx_y] = idx_raw - idx_divRound * 16;
         idx_divRound += char_batch_idx;
 
-        reinterpret_cast<int4*>(smSrc)[8 * (y_group * BLOCK_N_Y + tidx_y) + char_batch_idx] =\
-                                            reinterpret_cast<int4*>(s)[idx_divRound];
+        reinterpret_cast<int4*>(smSrc)[n_char_batch * (y_group * BLOCK_N_Y + tidx_y) +\
+                                char_batch_idx] = reinterpret_cast<int4*>(s)[idx_divRound];
     }
 
 
@@ -228,7 +239,7 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
         for (int v = 0; v <= 4; ++v) {     
             for (int u = 0; u <= 4; ++u) { 
                 
-                idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] +\
+                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] +\
                                                  3 * (tidx_x + u) + tidx_z;
                 val[i] += smSrc[idx_raw] * mask[i][u][v];
 
