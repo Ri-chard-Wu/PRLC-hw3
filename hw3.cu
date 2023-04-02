@@ -171,7 +171,7 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const int basey = bidx_y * bdim_y;
     const int z = basez + tidx_z;
     const int x = basex + tidx_x;
-    const int y = basey + tidx_y;
+    const int y = basey + tidx_y; 
 
     int idx_raw, idx_divRound, y_group, char_batch_idx;
 
@@ -180,9 +180,15 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const int n_char = n_char_batch * n_char_per_batch;
 
     __shared__ unsigned char smSrc[n_char * (BLOCK_N_Y + 4)];
-    __shared__ unsigned char smDst[128 * (BLOCK_N_Y + 4)];
-    __shared__ int t_batch_bases[6 * 4];
+    __shared__ unsigned char smDst[128 * BLOCK_N_Y];    
     __shared__ unsigned int xzBase[BLOCK_N_Y + 4];
+
+    __shared__ int t_batch_bases[6 * BLOCK_N_Y];    
+
+    
+    if(tidx_y < 4 && tidx_x < 6 && tidx_z == 0){
+        t_batch_bases[6 * tidx_y + tidx_x] = -1;
+    }
 
 
     if(x > width + 4 - 1 || y > height + 4 - 1) return;
@@ -210,17 +216,6 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     if(x >= width || y >= height)return;
 
     __syncthreads();
-
-
-
-    // if(y == 26 && x == 150 && z == 1){
-    //     for(int i=0;i<128;i++){
-    //         for(int j=0;j<8;j++){
-    //             printf("%d: %d\n", i, smSrc[128 * j + i]);
-    //         }            
-    //     }
-    // }
-
     
 
     float val[2] = {0.0};
@@ -241,28 +236,91 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
     const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
     
+
+
     idx_raw = channels * (width * y + x) + z;
     
     int char_id = 3 * tidx_x + tidx_z;
-    int t_batch_id = char_id >> 4; // (0 ~ 95) / 16 == 0 ~ 5
-    
+    int t_batch_id = char_id >> 4; 
 
-    if((idx_raw & 128) == 0){
-        t_batch_bases[t_batch_id] = char_id;
+    if(!(idx_raw & (16 - 1))){
+        // if(basex == 0 && basey == 608 && tidx_y == 3){
+        //     printf("%d, %d, %d\n", tidx_y, t_batch_id, char_id);
+        // }
+
+        t_batch_bases[6 * tidx_y + t_batch_id] = char_id;
     }
 
     __syncthreads();
 
-    if(char_id < t_batch_bases[0] || char_id > t_batch_bases[5]){
+
+    // if(basex == 0 && basey == 608 && tidx_x == 0 && tidx_y == 0 && tidx_z == 0){
+    //     for(int j=0;j<4;j++){
+    //         for(int i=0;i<6;i++){
+    //             printf("%d, %d: %d\n", j, i, t_batch_bases[6 * j + i]);
+    //         }
+            
+    //     }
+    // }
+
+    int last_valid_char_batch_id = 5;
+
+    if(width - 1 - basex <= BLOCK_N_X - 1){
+        int last_batch_id = (width - 1 - basex) >> 4;
+        
+        if(t_batch_bases[last_batch_id] == -1){
+            last_valid_char_batch_id = last_batch_id - 1;
+        }
+        else{
+            last_valid_char_batch_id = last_batch_id;
+        }
+    }
+
+
+
+    __syncthreads();
+    
+
+    if(char_id < t_batch_bases[6 * tidx_y + 0] || char_id >= \
+                                    t_batch_bases[6 * tidx_y + last_valid_char_batch_id]){
         t[channels * (width * y + x) + z] = c;
         return;
     }
 
-    smDst[char_id - t_batch_bases[t_batch_id] + 16 * (t_batch_id + 1)] = c;
+
+
+
+
+    // if(basex == 0 && basey == 608){
+    //     printf("%d, %d, %d, %d, %d\n", tidx_y, t_batch_bases[BLOCK_N_Y * tidx_y + 0],
+    //         t_batch_bases[BLOCK_N_Y * tidx_y + last_valid_char_batch_id],
+    //         BLOCK_N_Y * tidx_y + last_valid_char_batch_id,
+    //          char_id - t_batch_bases[BLOCK_N_Y *\
+    //                          tidx_y + t_batch_id] + 16 * (t_batch_id + 1));
+    // }
+
+
+
+
+    smDst[128 * tidx_y + char_id -\
+                 t_batch_bases[6 * tidx_y + t_batch_id] + 16 * (t_batch_id + 1)] = c;
 
     __syncthreads();
 
-    reinterpret_cast<int4*>(t)[idx_raw >> 4] = reinterpret_cast<int4*>(smDst)[t_batch_id];        
+
+    // if(x == 0 && y == 608 && z == 0){
+    //     for(int i=0;i<128;i++){
+    //         printf("%3d: %3d, %3d, %3d, %3d\n", i, smDst[128 * 0 + i] ,
+    //                         smDst[128 * 1 + i], smDst[128 * 2 + i], smDst[128 * 3 + i]);
+    //     }
+    // }
+
+
+    if(!(idx_raw & (16 - 1))){
+        reinterpret_cast<int4 *>(t)[idx_raw >> 4] =\
+                         reinterpret_cast<int4 *>(smDst)[8 * tidx_y + t_batch_id + 1];
+    }
+    
 }
 
 
