@@ -1,3 +1,5 @@
-width x height: 14400 x 9952
-cudaMemcpy src_img dt: 99418 us
-kernel dt: 20418 us
+read_png() time: 2349217 us
+cudaMemcpyHostToDevice time: 89106 us
+kernel time: 16070 us
+cudaMemcpyDeviceToHost time: 301199 us
+write_png() time: 4689458 us

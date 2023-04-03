@@ -44,18 +44,14 @@ using namespace std;
 // 8.png: 14400 x 9952 x 3
 
 
-// #define GRID_N_X
-// #define GRID_N_Y
+
 #define GRID_N_Z 1
 
-
-// rule1: x, y >= 4
-// rule2: x be multiple of 4.
 #define BLOCK_N_X 32
 #define BLOCK_N_Y 4
 #define BLOCK_N_Z 3
 
-// #define BLOCK_N_THREADS
+
 
 
 
@@ -137,35 +133,32 @@ void write_png(const char* filename, png_bytep image, const unsigned height, con
 
 
 __global__ void sobel(unsigned char *s, unsigned char *t, 
-                                const unsigned height, const unsigned width, const unsigned channels)
+                                unsigned height, unsigned width, unsigned channels)
 {
 
-    const short mask[MASK_N][MASK_X][MASK_Y] = {
-    
-        {{ -1, -4, -6, -4, -1},
-        { -2, -8,-12, -8, -2},
-        {  0,  0,  0,  0,  0},
-        {  2,  8, 12,  8,  2},
-        {  1,  4,  6,  4,  1}},
+    short mask[MASK_N * MASK_X * MASK_Y] = {
 
-        {{ -1, -2,  0,  2,  1},
-        { -4, -8,  0,  8,  4},
-        { -6,-12,  0, 12,  6},
-        { -4, -8,  0,  8,  4},
-        { -1, -2,  0,  2,  1}}
+          -1, -4, -6, -4, -1,
+          -2, -8,-12, -8, -2,
+           0,  0,  0,  0,  0,
+           2,  8, 12,  8,  2,
+           1,  4,  6,  4,  1,
+         
+          -1, -2,  0,  2,  1,
+          -4, -8,  0,  8,  4,
+          -6,-12,  0, 12,  6,
+          -4, -8,  0,  8,  4,
+          -1, -2,  0,  2,  1} ;
 
-    };
-
-    const int tidx_z = threadIdx.x;
-    const int tidx_x = threadIdx.y;
-    const int tidx_y = threadIdx.z;
+    const unsigned short tidx_z = threadIdx.x;
+    const unsigned short tidx_x = threadIdx.y;
+    const unsigned short tidx_y = threadIdx.z;
     const int bidx_z = blockIdx.x;
     const int bidx_x = blockIdx.y;
     const int bidx_y = blockIdx.z;
     const int bdim_z = blockDim.x;
     const int bdim_x = blockDim.y;
     const int bdim_y = blockDim.z;
-
     const int basez = bidx_z * bdim_z;
     const int basex = bidx_x * bdim_x;
     const int basey = bidx_y * bdim_y;
@@ -175,26 +168,16 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
     int idx_raw, idx_divRound, y_group, char_batch_idx;
 
-    const int n_char_per_batch = 16;
-    const int n_char_batch = (((BLOCK_N_X + 4) * 3) / n_char_per_batch) + 2;
-    const int n_char = n_char_batch * n_char_per_batch;
+    const short n_char_per_batch = 16;
+    const short n_char_batch = (((BLOCK_N_X + 4) * 3) / n_char_per_batch) + 2; // 8
+    const short n_char = n_char_batch * n_char_per_batch; // 256
 
     __shared__ unsigned char smSrc[n_char * (BLOCK_N_Y + 4)];
-    __shared__ unsigned char smDst[128 * BLOCK_N_Y];    
-    __shared__ unsigned int xzBase[BLOCK_N_Y + 4];
-
-    __shared__ int t_batch_bases[6 * BLOCK_N_Y];    
-
-    
-    if(tidx_y < 4 && tidx_x < 6 && tidx_z == 0){
-        t_batch_bases[6 * tidx_y + tidx_x] = -1;
-    }
-
+    __shared__ unsigned short xzBase[BLOCK_N_Y + 4];
 
     if(x > width + 4 - 1 || y > height + 4 - 1) return;
     
-
-    if(tidx_x < n_char_batch && tidx_z < 2){ 
+    if(tidx_x < n_char_batch && tidx_z < 2 && tidx_y < 4){ 
         
         y_group = (tidx_x + n_char_batch * tidx_z) / n_char_batch;  
         char_batch_idx = (tidx_x + n_char_batch * tidx_z) - y_group * n_char_batch; 
@@ -205,6 +188,7 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
         
         idx_raw = (3 * ((width + 4) * (y_group * BLOCK_N_Y + y) + basex) + basez);
         idx_divRound =  (idx_raw >> 4);
+
         xzBase[y_group * BLOCK_N_Y + tidx_y] = idx_raw - idx_divRound * 16;
         idx_divRound += char_batch_idx;
 
@@ -216,118 +200,53 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     if(x >= width || y >= height)return;
 
     __syncthreads();
+
     
+    if(tidx_y < 4){
+        short val0 = 0;
+        short val1 = 0;
+        float result;
+        unsigned char a;
 
-    float val[2] = {0.0};
 
-    for (int i = 0; i < MASK_N; ++i) {
-        for (int v = 0; v <= 4; ++v) {     
-            for (int u = 0; u <= 4; ++u) { 
-                
-                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] +\
-                                                 3 * (tidx_x + u) + tidx_z;
-                val[i] += smSrc[idx_raw] * mask[i][u][v];
-
+        for (char u = 0; u <= 1; ++u) { 
+            for (char v = 0; v <= 4; ++v) { 
+                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+                a = smSrc[idx_raw];
+                val0 += a * mask[5 * u + v];
             }
         }
-    }
 
-    val[0] = sqrt(val[0]*val[0] + val[1]*val[1]) / SCALE;
+        for (char u = 3; u <= 4; ++u) { 
+            for (char v = 0; v <= 4; ++v) { 
+                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+                a = smSrc[idx_raw];
+                val0 += a * mask[5 * u + v];
+            }
+        }
 
-    const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
-    
-
-
-    idx_raw = channels * (width * y + x) + z;
-    
-    int char_id = 3 * tidx_x + tidx_z;
-    int t_batch_id = char_id >> 4; 
-
-    if(!(idx_raw & (16 - 1))){
-        // if(basex == 0 && basey == 608 && tidx_y == 3){
-        //     printf("%d, %d, %d\n", tidx_y, t_batch_id, char_id);
-        // }
-
-        t_batch_bases[6 * tidx_y + t_batch_id] = char_id;
-    }
-
-    __syncthreads();
-
-
-    // if(basex == 0 && basey == 608 && tidx_x == 0 && tidx_y == 0 && tidx_z == 0){
-    //     for(int j=0;j<4;j++){
-    //         for(int i=0;i<6;i++){
-    //             printf("%d, %d: %d\n", j, i, t_batch_bases[6 * j + i]);
-    //         }
-            
-    //     }
-    // }
-
-    int last_valid_char_batch_id = 5;
-
-    if(width - 1 - basex <= BLOCK_N_X - 1){
-        int last_batch_id = (width - 1 - basex) >> 4;
         
-        if(t_batch_bases[last_batch_id] == -1){
-            last_valid_char_batch_id = last_batch_id - 1;
+        for (char u = 0; u <= 4; ++u) { 
+            for (char v = 0; v <= 1; ++v) {     
+                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+                a = smSrc[idx_raw];
+                val1 += a * mask[25 + 5 * u + v];
+            }
+
+            for (char v = 3; v <= 4; ++v) {     
+                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+                a = smSrc[idx_raw];
+                val1 += a * mask[25 + 5 * u + v];
+            }
         }
-        else{
-            last_valid_char_batch_id = last_batch_id;
-        }
-    }
 
 
+        result = sqrtf(val0*val0 + val1*val1) / SCALE;
+        const unsigned char c = (result > 255.0) ? 255 : result;
 
-    __syncthreads();
-    
-
-    if(char_id < t_batch_bases[6 * tidx_y + 0] || char_id >= \
-                                    t_batch_bases[6 * tidx_y + last_valid_char_batch_id]){
         t[channels * (width * y + x) + z] = c;
-        return;
     }
-
-
-
-
-
-    // if(basex == 0 && basey == 608){
-    //     printf("%d, %d, %d, %d, %d\n", tidx_y, t_batch_bases[BLOCK_N_Y * tidx_y + 0],
-    //         t_batch_bases[BLOCK_N_Y * tidx_y + last_valid_char_batch_id],
-    //         BLOCK_N_Y * tidx_y + last_valid_char_batch_id,
-    //          char_id - t_batch_bases[BLOCK_N_Y *\
-    //                          tidx_y + t_batch_id] + 16 * (t_batch_id + 1));
-    // }
-
-
-
-
-    smDst[128 * tidx_y + char_id -\
-                 t_batch_bases[6 * tidx_y + t_batch_id] + 16 * (t_batch_id + 1)] = c;
-
-    __syncthreads();
-
-
-    // if(x == 0 && y == 608 && z == 0){
-    //     for(int i=0;i<128;i++){
-    //         printf("%3d: %3d, %3d, %3d, %3d\n", i, smDst[128 * 0 + i] ,
-    //                         smDst[128 * 1 + i], smDst[128 * 2 + i], smDst[128 * 3 + i]);
-    //     }
-    // }
-
-
-    if(!(idx_raw & (16 - 1))){
-        reinterpret_cast<int4 *>(t)[idx_raw >> 4] =\
-                         reinterpret_cast<int4 *>(smDst)[8 * tidx_y + t_batch_id + 1];
-    }
-    
 }
-
-
-
-
-
-
 
 
 int main(int argc, char** argv) {
@@ -336,9 +255,19 @@ int main(int argc, char** argv) {
     
     unsigned height, width, channels, gridNx, gridNy;
     unsigned char *src_img = NULL;
+    unsigned char *devSrc, *devDst;
+    
+
+    auto start = high_resolution_clock::now();
     read_png(argv[1], &src_img, &height, &width, &channels);
+    cudaMalloc(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+    cout<<"read_png() time: "<<duration.count()<<" us"<<endl;
+
+
     assert(channels == 3);
-    printf("width x height: %d x %d\n", width, height);
+    // printf("width x height: %d x %d\n", width, height);
 
 
     gridNx = width / BLOCK_N_X + 1;
@@ -346,144 +275,51 @@ int main(int argc, char** argv) {
     dim3 nThreadsPerBlock(BLOCK_N_Z, BLOCK_N_X, BLOCK_N_Y);
     dim3 nBlocks(GRID_N_Z, gridNx, gridNy);
 
-    unsigned char *devSrc, *devDst;
-    cudaMallocManaged(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
+    
+    
 
-    auto start = high_resolution_clock::now();
-
+    start = high_resolution_clock::now();
     cudaMemcpy(devSrc, src_img, (height + 4) * (width + 4) * channels * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    cout<<"cudaMemcpyHostToDevice time: "<<duration.count()<<" us"<<endl;
 
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-    cout<<"cudaMemcpy src_img dt: "<<duration.count()<<" us"<<endl;
 
     cudaMalloc(&devDst, height * width * channels * sizeof(unsigned char));
 
+
     start = high_resolution_clock::now();
-
     sobel<<<nBlocks, nThreadsPerBlock>>>(devSrc, devDst, height, width, channels); 
-
     cudaDeviceSynchronize();
-
     stop = high_resolution_clock::now();
     duration = duration_cast<microseconds>(stop - start);
-    cout<<"kernel dt: "<<duration.count()<<" us"<<endl;
+    cout<<"kernel time: "<<duration.count()<<" us"<<endl;
 
     unsigned char* dst_img =
         (unsigned char*) malloc(height * width * channels * sizeof(unsigned char));
+                
 
+    start = high_resolution_clock::now();
     cudaMemcpy(dst_img, devDst, height * width * channels * sizeof(unsigned char), cudaMemcpyDeviceToHost);
-    
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    cout<<"cudaMemcpyDeviceToHost time: "<<duration.count()<<" us"<<endl;
+
+
+
+    start = high_resolution_clock::now();
     write_png(argv[2], dst_img, height, width, channels);
+    stop = high_resolution_clock::now();
+    duration = duration_cast<microseconds>(stop - start);
+    cout<<"write_png() time: "<<duration.count()<<" us"<<endl;
+
 
     cudaFree(devSrc);
     cudaFree(devDst);
-    free(src_img);
+    // free(src_img);
     free(dst_img);
 
     return 0;
 }
 
 
-
-
-
-// ###############################################################
-
-
-
-
-
-// // typedef int data_t;
-// typedef unsigned char data_t;
-
-// __global__ void device_copy_vector4_kernel(data_t* d_in, data_t* d_out, int N) {
-    
-//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-//     // for(int i = idx; i < N/4; i += blockDim.x * gridDim.x) {
-//     for(int i = idx; i < 1; i += blockDim.x * gridDim.x) {
-        
-//         printf("%d\n", i);
-        
-//         reinterpret_cast<int4*>(d_out)[i] = reinterpret_cast<int4*>(d_in)[i];
-//     }
-// }
-
-
-
-
-// int main() {
-    
-//     int size = 128;
-//     data_t d_out[size], d_in[size], *d_in_dev, *d_out_dev;
-
-
-//     cudaMalloc(&d_in_dev, size * sizeof(data_t));
-//     cudaMalloc(&d_out_dev, size * sizeof(data_t));
-
-//     for(int i=0;i<size;i++){
-//         d_in[i] = (data_t)i;
-//     }
-    
-//     cudaMemcpy(d_in_dev, d_in, size * sizeof(data_t), cudaMemcpyHostToDevice);
-
-//     device_copy_vector4_kernel<<<1, 1>>>(d_in_dev, d_out_dev, size);
-
-//     cudaMemcpy(d_out, d_out_dev, size * sizeof(data_t), cudaMemcpyDeviceToHost);
-
-
-//     for(int i=0;i<size;i++){
-//         printf("%d:, %d\n", i, (int)d_out[i]);
-//     }
-
-//     return 0;
-// }
-
-
-
-
-// ###############################################################
-
-
-
-
-
-// __global__ void device_copy_vector4_kernel(int* d_in, int* d_out, int N) {
-    
-//     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-//     for(int i = idx; i < N/4; i += blockDim.x * gridDim.x) {
-//             reinterpret_cast<int4*>(d_out)[i] = reinterpret_cast<int4*>(d_in)[i];
-//     }
-// }
-
-
-
-
-// int main() {
-    
-//     int size = 128;
-//     int d_out[size], d_in[size];
-//     int *d_in_dev, *d_out_dev;
-
-//     cudaMalloc(&d_in_dev, size * sizeof(int));
-//     cudaMalloc(&d_out_dev, size * sizeof(int));
-
-//     for(int i=0;i<size;i++){
-//         d_in[i] = i;
-//     }
-    
-//     cudaMemcpy(d_in_dev, d_in, size * sizeof(int), cudaMemcpyHostToDevice);
-
-//     device_copy_vector4_kernel<<<1, 1>>>(d_in_dev, d_out_dev, size);
-
-//     cudaMemcpy(d_out, d_out_dev, size * sizeof(int), cudaMemcpyDeviceToHost);
-
-
-//     for(int i=0;i<size;i++){
-//         printf("%d:, %d\n", i, d_out[i]);
-//     }
-
-//     return 0;
-// }

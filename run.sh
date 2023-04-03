@@ -8,6 +8,8 @@ RunFile=./hw3
 testCase=8
 
 inFile=./samples/$testCase.png
+# inFile=./bh6_2.png
+
 outFile=out.png
 golden_outFile=./samples/$testCase.out.png
 
