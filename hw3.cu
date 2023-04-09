@@ -173,30 +173,56 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     __shared__ unsigned char smSrc[128 * (BLOCK_N_Y + 4)];
     __shared__ unsigned short xzBase[BLOCK_N_Y + 4];
 
+    const unsigned long long n_pixels = width * height;
+
     // if(x > width + 4 - 1 || y > height + 4 - 1) return;
     
 
+    if(n_pixels > (1 << 31)){
+        if(tidx_x < 22 && tidx_z < 3 && tidx_y == 0 && 3 * tidx_x + tidx_z <= 63 ){ 
+            
+            y_group = (3 * tidx_x + tidx_z) / 32; 
+            y_id =  ((3 * tidx_x + tidx_z) - y_group * 32 ) / 8;
+            char_batch_idx = (3 * tidx_x + tidx_z) - y_group * 32 - y_id * 8;
 
-    if(tidx_x < 22 && tidx_z < 3 && tidx_y == 0 && 3 * tidx_x + tidx_z <= 63 ){ 
-        
-        y_group = (3 * tidx_x + tidx_z) / 32; 
-        y_id =  ((3 * tidx_x + tidx_z) - y_group * 32 ) / 8;
-        char_batch_idx = (3 * tidx_x + tidx_z) - y_group * 32 - y_id * 8;
+
+            if((y_group * BLOCK_N_Y + basey + y_id) <= (height + 4 - 1)){
+                idx_raw_64 = 3 * ((unsigned long long)(width + 4)) * ((unsigned long long)(y_group * BLOCK_N_Y + basey + y_id));
+                idx_raw_64 += 3 * (unsigned long long)basex;
+                idx_raw_64 += (unsigned long long)basez;
+
+                idx_divRound_64 =  (idx_raw_64 >> 4);
+
+                xzBase[y_group * BLOCK_N_Y + y_id] = idx_raw_64 - idx_divRound_64 * 16;
+                idx_divRound_64 += char_batch_idx;
+
+                reinterpret_cast<int4 *>(smSrc)[8 * (y_group * BLOCK_N_Y + y_id) +\
+                                        char_batch_idx] = reinterpret_cast<int4 *>(s)[idx_divRound_64];
+            }                                
+        }
+    }
+    else{
+        if(tidx_x < 22 && tidx_z < 3 && tidx_y == 0 && 3 * tidx_x + tidx_z <= 63 ){ 
+            
+            y_group = (3 * tidx_x + tidx_z) / 32; 
+            y_id =  ((3 * tidx_x + tidx_z) - y_group * 32 ) / 8;
+            char_batch_idx = (3 * tidx_x + tidx_z) - y_group * 32 - y_id * 8;
 
 
-        if((y_group * BLOCK_N_Y + basey + y_id) <= (height + 4 - 1)){
-            idx_raw_64 = 3 * ((unsigned long long)(width + 4)) * ((unsigned long long)(y_group * BLOCK_N_Y + basey + y_id));
-            idx_raw_64 += 3 * (unsigned long long)basex;
-            idx_raw_64 += (unsigned long long)basez;
+            if((y_group * BLOCK_N_Y + basey + y_id) <= (height + 4 - 1)){
+                idx_raw = 3 * ((width + 4)) * ((y_group * BLOCK_N_Y + basey + y_id));
+                idx_raw += 3 * basex;
+                idx_raw += basez;
 
-            idx_divRound_64 =  (idx_raw_64 >> 4);
+                idx_divRound =  (idx_raw >> 4);
 
-            xzBase[y_group * BLOCK_N_Y + y_id] = idx_raw_64 - idx_divRound_64 * 16;
-            idx_divRound_64 += char_batch_idx;
+                xzBase[y_group * BLOCK_N_Y + y_id] = idx_raw - idx_divRound * 16;
+                idx_divRound += char_batch_idx;
 
-            reinterpret_cast<int4 *>(smSrc)[8 * (y_group * BLOCK_N_Y + y_id) +\
-                                    char_batch_idx] = reinterpret_cast<int4 *>(s)[idx_divRound_64];
-        }                                
+                reinterpret_cast<int4 *>(smSrc)[8 * (y_group * BLOCK_N_Y + y_id) +\
+                                        char_batch_idx] = reinterpret_cast<int4 *>(s)[idx_divRound];
+            }                                
+        }        
     }
 
 
@@ -245,7 +271,13 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     result = sqrtf(((int)val0) * ((int)val0) + ((int)val1)*((int)val1)) / SCALE;
     const unsigned char c = (result > 255.0) ? 255 : result;
 
-    t[3 * (width * y + x) + z] = c;
+    if(n_pixels > (1 << 31)){
+        t[3 * (((unsigned long long)width) * y + x) + z] = c;
+    }
+    else{
+        t[3 * (width * y + x) + z] = c;
+    }
+    
 
 }
 
