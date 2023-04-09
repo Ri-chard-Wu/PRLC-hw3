@@ -166,86 +166,87 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const int x = basex + tidx_x;
     const int y = basey + tidx_y; 
 
-    int idx_raw, idx_divRound, y_group, char_batch_idx;
+    int idx_raw, idx_divRound, y_group, y_id, char_batch_idx;
 
-    const short n_char_per_batch = 16;
-    const short n_char_batch = (((BLOCK_N_X + 4) * 3) / n_char_per_batch) + 2; // 8
-    const short n_char = n_char_batch * n_char_per_batch; // 256
+    unsigned long long idx_raw_64, idx_divRound_64;
 
-    __shared__ unsigned char smSrc[n_char * (BLOCK_N_Y + 4)];
+    __shared__ unsigned char smSrc[128 * (BLOCK_N_Y + 4)];
     __shared__ unsigned short xzBase[BLOCK_N_Y + 4];
 
-    if(x > width + 4 - 1 || y > height + 4 - 1) return;
+    // if(x > width + 4 - 1 || y > height + 4 - 1) return;
     
-    if(tidx_x < n_char_batch && tidx_z < 2 && tidx_y < 4){ 
-        
-        y_group = (tidx_x + n_char_batch * tidx_z) / n_char_batch;  
-        char_batch_idx = (tidx_x + n_char_batch * tidx_z) - y_group * n_char_batch; 
-        
-        if((BLOCK_N_Y + y) > (height + 4 - 1)){
-            y_group = y_group - y_group;
-        }
-        
-        idx_raw = (3 * ((width + 4) * (y_group * BLOCK_N_Y + y) + basex) + basez);
-        idx_divRound =  (idx_raw >> 4);
 
-        xzBase[y_group * BLOCK_N_Y + tidx_y] = idx_raw - idx_divRound * 16;
-        idx_divRound += char_batch_idx;
 
-        reinterpret_cast<int4 *>(smSrc)[n_char_batch * (y_group * BLOCK_N_Y + tidx_y) +\
-                                char_batch_idx] = reinterpret_cast<int4 *>(s)[idx_divRound];
+    if(tidx_x < 22 && tidx_z < 3 && tidx_y == 0 && 3 * tidx_x + tidx_z <= 63 ){ 
+        
+        y_group = (3 * tidx_x + tidx_z) / 32; 
+        y_id =  ((3 * tidx_x + tidx_z) - y_group * 32 ) / 8;
+        char_batch_idx = (3 * tidx_x + tidx_z) - y_group * 32 - y_id * 8;
+
+
+        if((y_group * BLOCK_N_Y + basey + y_id) <= (height + 4 - 1)){
+            idx_raw_64 = 3 * ((unsigned long long)(width + 4)) * ((unsigned long long)(y_group * BLOCK_N_Y + basey + y_id));
+            idx_raw_64 += 3 * (unsigned long long)basex;
+            idx_raw_64 += (unsigned long long)basez;
+
+            idx_divRound_64 =  (idx_raw_64 >> 4);
+
+            xzBase[y_group * BLOCK_N_Y + y_id] = idx_raw_64 - idx_divRound_64 * 16;
+            idx_divRound_64 += char_batch_idx;
+
+            reinterpret_cast<int4 *>(smSrc)[8 * (y_group * BLOCK_N_Y + y_id) +\
+                                    char_batch_idx] = reinterpret_cast<int4 *>(s)[idx_divRound_64];
+        }                                
     }
 
 
     if(x >= width || y >= height)return;
 
     __syncthreads();
+   
+    short val0 = 0;
+    short val1 = 0;
+    float result;
+    unsigned char a;
+
+
+    for (char u = 0; u <= 1; ++u) { 
+        for (char v = 0; v <= 4; ++v) { 
+            idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+            a = smSrc[idx_raw];
+            val0 += a * mask[5 * u + v];
+        }
+    }
+
+    for (char u = 3; u <= 4; ++u) { 
+        for (char v = 0; v <= 4; ++v) { 
+            idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+            a = smSrc[idx_raw];
+            val0 += a * mask[5 * u + v];
+        }
+    }
 
     
-    if(tidx_y < 4){
-        short val0 = 0;
-        short val1 = 0;
-        float result;
-        unsigned char a;
-
-
-        for (char u = 0; u <= 1; ++u) { 
-            for (char v = 0; v <= 4; ++v) { 
-                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
-                a = smSrc[idx_raw];
-                val0 += a * mask[5 * u + v];
-            }
+    for (char u = 0; u <= 4; ++u) { 
+        for (char v = 0; v <= 1; ++v) {     
+            idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+            a = smSrc[idx_raw];
+            val1 += a * mask[25 + 5 * u + v];
         }
 
-        for (char u = 3; u <= 4; ++u) { 
-            for (char v = 0; v <= 4; ++v) { 
-                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
-                a = smSrc[idx_raw];
-                val0 += a * mask[5 * u + v];
-            }
+        for (char v = 3; v <= 4; ++v) {     
+            idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+            a = smSrc[idx_raw];
+            val1 += a * mask[25 + 5 * u + v];
         }
-
-        
-        for (char u = 0; u <= 4; ++u) { 
-            for (char v = 0; v <= 1; ++v) {     
-                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
-                a = smSrc[idx_raw];
-                val1 += a * mask[25 + 5 * u + v];
-            }
-
-            for (char v = 3; v <= 4; ++v) {     
-                idx_raw = n_char * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
-                a = smSrc[idx_raw];
-                val1 += a * mask[25 + 5 * u + v];
-            }
-        }
-
-
-        result = sqrtf(val0*val0 + val1*val1) / SCALE;
-        const unsigned char c = (result > 255.0) ? 255 : result;
-
-        t[channels * (width * y + x) + z] = c;
     }
+
+
+    result = sqrtf(((int)val0) * ((int)val0) + ((int)val1)*((int)val1)) / SCALE;
+    const unsigned char c = (result > 255.0) ? 255 : result;
+
+    t[3 * (width * y + x) + z] = c;
+
 }
 
 
