@@ -44,14 +44,18 @@ using namespace std;
 // 8.png: 14400 x 9952 x 3
 
 
-
+// #define GRID_N_X
+// #define GRID_N_Y
 #define GRID_N_Z 1
 
-#define BLOCK_N_X 32
+
+// rule1: x, y >= 4
+// rule2: x be multiple of 4.
+#define BLOCK_N_X 32  
 #define BLOCK_N_Y 4
 #define BLOCK_N_Z 3
 
-
+// #define BLOCK_N_THREADS
 
 
 
@@ -132,6 +136,157 @@ void write_png(const char* filename, png_bytep image, const unsigned height, con
 
 
 
+// __global__ void sobel(unsigned char *s, unsigned char *t, 
+//                                 const unsigned height, const unsigned width, const unsigned channels)
+// {
+
+
+//     const int mask[MASK_N][MASK_X][MASK_Y] = {
+    
+//         {{ -1, -4, -6, -4, -1},
+//         { -2, -8,-12, -8, -2},
+//         {  0,  0,  0,  0,  0},
+//         {  2,  8, 12,  8,  2},
+//         {  1,  4,  6,  4,  1}},
+
+//         {{ -1, -2,  0,  2,  1},
+//         { -4, -8,  0,  8,  4},
+//         { -6,-12,  0, 12,  6},
+//         { -4, -8,  0,  8,  4},
+//         { -1, -2,  0,  2,  1}}
+
+//     };
+
+//     const int tidx_z = threadIdx.x;
+//     const int tidx_x = threadIdx.y;
+//     const int tidx_y = threadIdx.z;
+//     const int bidx_z = blockIdx.x;
+//     const int bidx_x = blockIdx.y;
+//     const int bidx_y = blockIdx.z;
+//     const int bdim_z = blockDim.x;
+//     const int bdim_x = blockDim.y;
+//     const int bdim_y = blockDim.z;
+
+//     const int basez = bidx_z * bdim_z;
+//     const int basex = bidx_x * bdim_x;
+//     const int basey = bidx_y * bdim_y;
+//     const int z = basez + tidx_z;
+//     const int x = basex + tidx_x;
+//     const int y = basey + tidx_y;
+
+
+
+//     __shared__ unsigned char smSrc[3 * (BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
+//     // __shared__ ulong4 smSrc[(BLOCK_N_Y + 4)];
+
+
+//     if(x > width + 4 - 1 || y > height + 4 - 1) return;
+    
+ 
+//     // smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z] =\
+//     //                     s[channels * ((width + 4) * y + x) + z];
+    
+
+//     // if((tidx_x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
+//     //     smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + BLOCK_N_X + tidx_x) + tidx_z] =\
+//     //                     s[channels * ((width + 4) * y + BLOCK_N_X + x) + z];
+//     // }
+
+//     // if((tidx_y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
+//     //     smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z] =\
+//     //                     s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
+//     // }
+
+//     // if((tidx_x < 4) && (tidx_y < 4) &&\
+//     //                 (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
+//     //     smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + BLOCK_N_X + tidx_x) + tidx_z] =\
+//     //                     s[channels * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
+//     // }
+    
+
+//     if(tidx_x == 0 && tidx_z == 0){
+
+//         // printf("%d, %d\n", x, y);
+//         // printf("a\n");
+
+//         if(x + 128 - 1 <= width + 4 - 1){
+//             // ((float4 *)(&smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z]))[0] =\
+//             //                     ((float4 *)(&s[channels * ((width + 4) * y + x) + z]))[0];
+
+
+//             reinterpret_cast<int4*>(smSrc)[0] =\
+//                  reinterpret_cast<int4*>(s)[0];
+
+
+//             // smSrc[tidx_y] = s[(3 * ((width + 4) * y +  bidx_x * bdim_x)) / 128];
+//             // ((ulong4 *)(&smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z]))[0] =\
+//             //                      s[(channels * ((width + 4) * y + x) + z) / 128];
+
+
+//             // printf("b\n");
+
+//             // ((float4 *)(&smSrc[channels * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z]))[0] = a;
+//         }
+
+//         // printf("c\n");
+
+
+
+//         // if(BLOCK_N_Y + y <= height + 4 - 1){
+//         //     ((float4 *)(&smSrc[channels * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z]))[0] =\
+//         //             ((float4 *)(&s[channels * ((width + 4) * (BLOCK_N_Y + y) + x) + z]))[0];
+
+//         //     smSrc[BLOCK_N_Y + tidx_y] = \
+//         //         ((ulong4 *)(&s[(3 * ((width + 4) * (BLOCK_N_Y + y) +  bidx_x * bdim_x)) / 128]))[0];                    
+//         // }
+//     }
+
+
+
+
+//     for(int i=0;i<128;i++){
+//         for(int j=0;j<8;j++){
+//             printf("%d\n", ((unsigned char *)smSrc)[channels * ((BLOCK_N_X + 4) * j + i)]);
+//         }
+//     }
+
+//     if(x >= width || y >= height)return;
+
+//     __syncthreads();
+
+
+//     // float val[2] = {0.0};
+
+//     // for (int i = 0; i < MASK_N; ++i) {
+
+//     //     for (int v = 0; v <= 4; ++v) {     
+//     //         for (int u = 0; u <= 4; ++u) { 
+                
+//     //             val[i] += smSrc[channels * ((BLOCK_N_X + 4) * (tidx_y + v)\
+//     //                                         + (tidx_x + u)) + tidx_z] * mask[i][u][v];
+
+//     //             // val[i] += s[channels * ((width + 4) * (y + v) + x + u) + z] * mask[i][u][v];
+//     //         }
+//     //     }
+//     // }
+
+//     // val[0] = sqrt(val[0]*val[0] + val[1]*val[1]) / SCALE;
+
+//     // const unsigned char c = (val[0] > 255.0) ? 255 : val[0];
+
+//     // t[channels * (width * y + x) + z] = c;
+// }
+
+
+
+
+
+
+
+
+
+
+
 __global__ void sobel(unsigned char *s, unsigned char *t, 
                                 unsigned height, unsigned width, unsigned channels)
 {
@@ -170,60 +325,36 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
     unsigned long long idx_raw_64, idx_divRound_64;
 
-    __shared__ unsigned char smSrc[128 * (BLOCK_N_Y + 4)];
-    __shared__ unsigned short xzBase[BLOCK_N_Y + 4];
+    __shared__ unsigned char smSrc[3 * (BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
 
     const unsigned long long n_pixels = width * height;
 
-    // if(x > width + 4 - 1 || y > height + 4 - 1) return;
+    
+    if(x > width + 4 - 1 || y > height + 4 - 1) return;
+    
+ 
+    smSrc[3 * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z] =\
+                        s[3 * ((width + 4) * y + x) + z];
     
 
-    if(n_pixels > (1 << 31)){
-        if(tidx_x < 22 && tidx_z < 3 && tidx_y == 0 && 3 * tidx_x + tidx_z <= 63 ){ 
-            
-            y_group = (3 * tidx_x + tidx_z) / 32; 
-            y_id =  ((3 * tidx_x + tidx_z) - y_group * 32 ) / 8;
-            char_batch_idx = (3 * tidx_x + tidx_z) - y_group * 32 - y_id * 8;
-
-
-            if((y_group * BLOCK_N_Y + basey + y_id) <= (height + 4 - 1)){
-                idx_raw_64 = 3 * ((unsigned long long)(width + 4)) * ((unsigned long long)(y_group * BLOCK_N_Y + basey + y_id));
-                idx_raw_64 += 3 * (unsigned long long)basex;
-                idx_raw_64 += (unsigned long long)basez;
-
-                idx_divRound_64 =  (idx_raw_64 >> 4);
-
-                xzBase[y_group * BLOCK_N_Y + y_id] = idx_raw_64 - idx_divRound_64 * 16;
-                idx_divRound_64 += char_batch_idx;
-
-                reinterpret_cast<int4 *>(smSrc)[8 * (y_group * BLOCK_N_Y + y_id) +\
-                                        char_batch_idx] = reinterpret_cast<int4 *>(s)[idx_divRound_64];
-            }                                
-        }
+    if((tidx_x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
+        smSrc[3 * ((BLOCK_N_X + 4) * tidx_y + BLOCK_N_X + tidx_x) + tidx_z] =\
+                        s[3 * ((width + 4) * y + BLOCK_N_X + x) + z];
     }
-    else{
-        if(tidx_x < 22 && tidx_z < 3 && tidx_y == 0 && 3 * tidx_x + tidx_z <= 63 ){ 
-            
-            y_group = (3 * tidx_x + tidx_z) / 32; 
-            y_id =  ((3 * tidx_x + tidx_z) - y_group * 32 ) / 8;
-            char_batch_idx = (3 * tidx_x + tidx_z) - y_group * 32 - y_id * 8;
 
-
-            if((y_group * BLOCK_N_Y + basey + y_id) <= (height + 4 - 1)){
-                idx_raw = 3 * ((width + 4)) * ((y_group * BLOCK_N_Y + basey + y_id));
-                idx_raw += 3 * basex;
-                idx_raw += basez;
-
-                idx_divRound =  (idx_raw >> 4);
-
-                xzBase[y_group * BLOCK_N_Y + y_id] = idx_raw - idx_divRound * 16;
-                idx_divRound += char_batch_idx;
-
-                reinterpret_cast<int4 *>(smSrc)[8 * (y_group * BLOCK_N_Y + y_id) +\
-                                        char_batch_idx] = reinterpret_cast<int4 *>(s)[idx_divRound];
-            }                                
-        }        
+    if((tidx_y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
+        smSrc[3 * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z] =\
+                        s[3 * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
     }
+
+    if((tidx_x < 4) && (tidx_y < 4) &&\
+                    (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
+        smSrc[3 * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + BLOCK_N_X + tidx_x) + tidx_z] =\
+                        s[3 * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
+    }
+
+
+
 
 
     if(x >= width || y >= height)return;
@@ -238,7 +369,7 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
     for (char u = 0; u <= 1; ++u) { 
         for (char v = 0; v <= 4; ++v) { 
-            idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+            idx_raw = 3 * (BLOCK_N_X + 4) * (tidx_y + v) + 3 * (tidx_x + u) + tidx_z;
             a = smSrc[idx_raw];
             val0 += a * mask[5 * u + v];
         }
@@ -246,7 +377,7 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
 
     for (char u = 3; u <= 4; ++u) { 
         for (char v = 0; v <= 4; ++v) { 
-            idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+            idx_raw = 3 * (BLOCK_N_X + 4) * (tidx_y + v) + 3 * (tidx_x + u) + tidx_z;
             a = smSrc[idx_raw];
             val0 += a * mask[5 * u + v];
         }
@@ -255,13 +386,13 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     
     for (char u = 0; u <= 4; ++u) { 
         for (char v = 0; v <= 1; ++v) {     
-            idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+            idx_raw = 3 * (BLOCK_N_X + 4) * (tidx_y + v) + 3 * (tidx_x + u) + tidx_z;
             a = smSrc[idx_raw];
             val1 += a * mask[25 + 5 * u + v];
         }
 
         for (char v = 3; v <= 4; ++v) {     
-            idx_raw = 128 * (tidx_y + v) + xzBase[tidx_y + v] + 3 * (tidx_x + u) + tidx_z;
+            idx_raw = 3 * (BLOCK_N_X + 4) * (tidx_y + v) + 3 * (tidx_x + u) + tidx_z;
             a = smSrc[idx_raw];
             val1 += a * mask[25 + 5 * u + v];
         }
@@ -280,6 +411,12 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     
 
 }
+
+
+
+
+
+
 
 
 int main(int argc, char** argv) {
@@ -354,5 +491,3 @@ int main(int argc, char** argv) {
 
     return 0;
 }
-
-
