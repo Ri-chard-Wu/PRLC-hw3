@@ -1,27 +1,19 @@
 hw3.cu(73): warning: result of call is not used
 
-hw3.cu(256): warning: integer conversion resulted in a change of sign
+hw3.cu(182): warning: integer conversion resulted in a change of sign
 
-hw3.cu(175): warning: variable "idx_divRound" was declared but never referenced
-
-hw3.cu(175): warning: variable "y_group" was declared but never referenced
-
-hw3.cu(175): warning: variable "y_id" was declared but never referenced
-
-hw3.cu(175): warning: variable "char_batch_idx" was declared but never referenced
-
-hw3.cu(177): warning: variable "idx_raw_64" was declared but never referenced
-
-hw3.cu(177): warning: variable "idx_divRound_64" was declared but never referenced
+hw3.cu(272): warning: integer conversion resulted in a change of sign
 
 ptxas info    : 0 bytes gmem
 ptxas info    : Compiling entry function '_Z5sobelPhS_jjj' for 'sm_61'
 ptxas info    : Function properties for _Z5sobelPhS_jjj
     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
-ptxas info    : Used 25 registers, 864 bytes smem, 348 bytes cmem[0], 32 bytes cmem[2]
+ptxas info    : Used 25 registers, 480 bytes smem, 348 bytes cmem[0], 32 bytes cmem[2]
 hw3.cu(73): warning: result of call is not used
 
-hw3.cu(256): warning: integer conversion resulted in a change of sign
+hw3.cu(182): warning: integer conversion resulted in a change of sign
+
+hw3.cu(272): warning: integer conversion resulted in a change of sign
 
 hw3.cu: In function 'int read_png(const char*, unsigned char**, unsigned int*, unsigned int*, unsigned int*)':
 hw3.cu:73:6: warning: ignoring return value of 'size_t fread(void*, size_t, size_t, FILE*)', declared with attribute warn_unused_result [-Wunused-result]

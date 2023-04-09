@@ -1,5 +1,2 @@
-read_png() time: 2417811 us
-cudaMemcpyHostToDevice time: 90535 us
-kernel time: 14996 us
-cudaMemcpyDeviceToHost time: 316351 us
-write_png() time: 8020742 us
+read_png() time: 2429802 us
+kernel time: 14722 us

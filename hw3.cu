@@ -97,7 +97,7 @@ int read_png(const char* filename, unsigned char** image, unsigned* height, unsi
     rowbytes = png_get_rowbytes(png_ptr, info_ptr);
     *channels = (int)png_get_channels(png_ptr, info_ptr);
 
-    if ((*image = (unsigned char*)calloc((rowbytes + 4*3) * (*height + 4), 1)) == NULL) {
+    if ((*image = (unsigned char*)calloc((rowbytes + 4*3) * ((unsigned long long)(*height) + 4), 1)) == NULL) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return 3;
     }
@@ -172,41 +172,57 @@ __global__ void sobel(unsigned char *s, unsigned char *t,
     const int x = basex + tidx_x;
     const int y = basey + tidx_y; 
 
-    int idx_raw, idx_divRound, y_group, y_id, char_batch_idx;
-
-    unsigned long long idx_raw_64, idx_divRound_64;
-
     __shared__ unsigned char smSrc[3 * (BLOCK_N_X + 4) * (BLOCK_N_Y + 4)];
-
+    int idx_raw;
     const unsigned long long n_pixels = width * height;
-
     
     if(x > width + 4 - 1 || y > height + 4 - 1) return;
     
  
-    smSrc[3 * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z] =\
-                        s[3 * ((width + 4) * y + x) + z];
-    
+    if(n_pixels > (1 << 31)){
 
-    if((tidx_x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
-        smSrc[3 * ((BLOCK_N_X + 4) * tidx_y + BLOCK_N_X + tidx_x) + tidx_z] =\
-                        s[3 * ((width + 4) * y + BLOCK_N_X + x) + z];
+        smSrc[3 * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z] =\
+                    s[3 * (((unsigned long long)width + 4) * y + x) + z];
+        
+
+        if((tidx_x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
+            smSrc[3 * ((BLOCK_N_X + 4) * tidx_y + BLOCK_N_X + tidx_x) + tidx_z] =\
+                    s[3 * (((unsigned long long)width + 4) * y + BLOCK_N_X + x) + z];
+        }
+
+        if((tidx_y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
+            smSrc[3 * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z] =\
+                    s[3 * (((unsigned long long)width + 4) * (BLOCK_N_Y + y) + x) + z];
+        }
+
+        if((tidx_x < 4) && (tidx_y < 4) &&\
+                        (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
+            smSrc[3 * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + BLOCK_N_X + tidx_x) + tidx_z] =\
+                    s[3 * (((unsigned long long)width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
+        }
     }
+    else{
 
-    if((tidx_y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
-        smSrc[3 * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z] =\
-                        s[3 * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
+        smSrc[3 * ((BLOCK_N_X + 4) * tidx_y + tidx_x) + tidx_z] =\
+                            s[3 * ((width + 4) * y + x) + z];
+        
+
+        if((tidx_x < 4) && (BLOCK_N_X + x <= width + 4 - 1)){
+            smSrc[3 * ((BLOCK_N_X + 4) * tidx_y + BLOCK_N_X + tidx_x) + tidx_z] =\
+                            s[3 * ((width + 4) * y + BLOCK_N_X + x) + z];
+        }
+
+        if((tidx_y < 4) && (BLOCK_N_Y + y <= height + 4 - 1)){
+            smSrc[3 * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + tidx_x) + tidx_z] =\
+                            s[3 * ((width + 4) * (BLOCK_N_Y + y) + x) + z];
+        }
+
+        if((tidx_x < 4) && (tidx_y < 4) &&\
+                        (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
+            smSrc[3 * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + BLOCK_N_X + tidx_x) + tidx_z] =\
+                            s[3 * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
+        }
     }
-
-    if((tidx_x < 4) && (tidx_y < 4) &&\
-                    (BLOCK_N_X + x <= width + 4 - 1) && (BLOCK_N_Y + y <= height + 4 - 1)){
-        smSrc[3 * ((BLOCK_N_X + 4) * (BLOCK_N_Y + tidx_y) + BLOCK_N_X + tidx_x) + tidx_z] =\
-                        s[3 * ((width + 4) * (BLOCK_N_Y + y) + BLOCK_N_X + x) + z];
-    }
-
-
-
-
 
     if(x >= width || y >= height)return;
 
@@ -281,7 +297,7 @@ int main(int argc, char** argv) {
 
     auto start = high_resolution_clock::now();
     read_png(argv[1], &src_img, &height, &width, &channels);
-    cudaMalloc(&devSrc, (height + 4) * (width + 4) * channels * sizeof(unsigned char));
+    cudaMalloc(&devSrc, ((unsigned long long)height + 4) * (width + 4) * channels * sizeof(unsigned char));
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
     cout<<"read_png() time: "<<duration.count()<<" us"<<endl;
@@ -299,45 +315,47 @@ int main(int argc, char** argv) {
     
     
 
-    start = high_resolution_clock::now();
-    cudaMemcpy(devSrc, src_img, (height + 4) * (width + 4) * channels * sizeof(unsigned char), cudaMemcpyHostToDevice);
-    stop = high_resolution_clock::now();
-    duration = duration_cast<microseconds>(stop - start);
-    cout<<"cudaMemcpyHostToDevice time: "<<duration.count()<<" us"<<endl;
+    // start = high_resolution_clock::now();
+    cudaMemcpy(devSrc, src_img, ((unsigned long long)height + 4) * (width + 4) * channels * sizeof(unsigned char), cudaMemcpyHostToDevice);
+    // stop = high_resolution_clock::now();
+    // duration = duration_cast<microseconds>(stop - start);
+    // cout<<"cudaMemcpyHostToDevice time: "<<duration.count()<<" us"<<endl;
 
+    free(src_img);
 
-    cudaMalloc(&devDst, height * width * channels * sizeof(unsigned char));
+    cudaMalloc(&devDst, (unsigned long long)height * width * channels * sizeof(unsigned char));
 
 
     start = high_resolution_clock::now();
     sobel<<<nBlocks, nThreadsPerBlock>>>(devSrc, devDst, height, width, channels); 
+
+    unsigned char* dst_img =
+        (unsigned char*) malloc((unsigned long long)height * width * channels * sizeof(unsigned char));
+         
     cudaDeviceSynchronize();
     stop = high_resolution_clock::now();
     duration = duration_cast<microseconds>(stop - start);
     cout<<"kernel time: "<<duration.count()<<" us"<<endl;
 
-    unsigned char* dst_img =
-        (unsigned char*) malloc(height * width * channels * sizeof(unsigned char));
-                
-
-    start = high_resolution_clock::now();
-    cudaMemcpy(dst_img, devDst, height * width * channels * sizeof(unsigned char), cudaMemcpyDeviceToHost);
-    stop = high_resolution_clock::now();
-    duration = duration_cast<microseconds>(stop - start);
-    cout<<"cudaMemcpyDeviceToHost time: "<<duration.count()<<" us"<<endl;
+       
+    // start = high_resolution_clock::now();
+    cudaMemcpy(dst_img, devDst, (unsigned long long)height * width * channels * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+    // stop = high_resolution_clock::now();
+    // duration = duration_cast<microseconds>(stop - start);
+    // cout<<"cudaMemcpyDeviceToHost time: "<<duration.count()<<" us"<<endl;
 
 
 
-    start = high_resolution_clock::now();
+    // start = high_resolution_clock::now();
     write_png(argv[2], dst_img, height, width, channels);
-    stop = high_resolution_clock::now();
-    duration = duration_cast<microseconds>(stop - start);
-    cout<<"write_png() time: "<<duration.count()<<" us"<<endl;
+    // stop = high_resolution_clock::now();
+    // duration = duration_cast<microseconds>(stop - start);
+    // cout<<"write_png() time: "<<duration.count()<<" us"<<endl;
 
 
     cudaFree(devSrc);
     cudaFree(devDst);
-    // free(src_img);
+    
     free(dst_img);
 
     return 0;
